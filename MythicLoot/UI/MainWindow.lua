@@ -2,13 +2,15 @@ local ADDON_NAME, MythicLoot = ...
 
 -- Width is chosen so all 15 slot columns fit at once — no horizontal scroll,
 -- nothing runs off the right edge.
--- Two toolbar rows (specs/slots, then Find Upgrades + Stat Priority share row 2)
--- sit above the list, so the height/header/scroll offsets leave room for both
--- before the column headers.
+-- Row 1 (specs/slots) is always shown; row 2 (Find Upgrades + Stat Priority) is
+-- collapsible. The geometry here is the EXPANDED layout; collapsing hides row 2
+-- and shifts the banner/header/list up by ROW2_SPAN, shrinking the window to
+-- match (see ApplyToolsCollapse). The list keeps the same height either way.
 local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 588
+local ROW2_SPAN = 34 -- vertical space row 2 occupies; reclaimed when collapsed
 -- User-adjustable overall scale, saved account-wide.
 local DEFAULT_SCALE, MIN_SCALE, MAX_SCALE, SCALE_STEP = 1.15, 0.8, 1.6, 0.05
-local SCROLL_TOP, SCROLL_BOTTOM = -146, 12
+local SCROLL_TOP, SCROLL_BOTTOM = -138, 12
 local LIST_WIDTH = WINDOW_WIDTH - 42
 
 -- Every row is one fixed-height line: [dungeon icon][name][slot grid][badge].
@@ -24,7 +26,8 @@ local CELL_SIZE, CELL_GAP = 26, 4
 local CELL = CELL_SIZE + CELL_GAP
 local BADGE_RESERVE = 70 -- right-side room kept clear for the coverage badge
 local HEADER_CELL = CELL_SIZE
-local HEADER_Y = -116
+local HEADER_Y = -110
+local BANNER_Y = -94
 
 local COLOR_FULL = "|cff33ff66"
 local COLOR_PARTIAL = "|cffffd100"
@@ -41,8 +44,10 @@ local STAR_TOOLTIP = {
 
 local window, specDropdown, slotDropdown, floorDropdown, banner, status, scaleReadout
 local statDropdowns = {} -- the three Stat Priority rank dropdowns (1st/2nd/3rd)
+local row2Widgets = {}   -- every widget on the collapsible second row
+local collapseButton     -- row-1 toggle that shows/hides row 2
 local scrollFrame, scrollChild, headerFrame
-local Render -- forward declaration
+local Render, ApplyToolsCollapse -- forward declarations
 
 -- ===== Scale =====
 
@@ -822,12 +827,29 @@ local function CreateToolbar()
 		SetSpecSelection(MythicLoot.GetLootSpec())
 	end)
 
-	-- Second row: seed the Slot Filter from the player's own under-floor gear.
+	-- Collapse toggle for row 2. Standard [-]/[+] box; lives on row 1 so it stays
+	-- visible when row 2 is hidden. Textures are set by ApplyToolsCollapse.
+	collapseButton = CreateFrame("Button", nil, window)
+	collapseButton:SetSize(24, 24)
+	collapseButton:SetPoint("LEFT", lootButton, "RIGHT", 10, 0)
+	collapseButton:SetScript("OnClick", function()
+		ApplyToolsCollapse(not MythicLootGlobalDB.toolsCollapsed)
+	end)
+	collapseButton:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+		GameTooltip:SetText(MythicLootGlobalDB.toolsCollapsed and "Show tools" or "Hide tools")
+		GameTooltip:AddLine("Find Upgrades and Stat Priority.", 0.8, 0.8, 0.8, true)
+		GameTooltip:Show()
+	end)
+	collapseButton:SetScript("OnLeave", GameTooltip_Hide)
+
+	-- Second row (collapsible): seed the Slot Filter from under-floor gear.
 	local upgradesButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
 	upgradesButton:SetSize(110, 24)
-	upgradesButton:SetPoint("TOPLEFT", 10, -58)
+	upgradesButton:SetPoint("TOPLEFT", 10, -66)
 	upgradesButton:SetText("Find Upgrades")
 	upgradesButton:SetScript("OnClick", SeedNeededSlots)
+	table.insert(row2Widgets, upgradesButton)
 	upgradesButton:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
 		GameTooltip:SetText("Find Upgrades")
@@ -840,11 +862,13 @@ local function CreateToolbar()
 	local goalLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	goalLabel:SetPoint("LEFT", upgradesButton, "RIGHT", 8, 0)
 	goalLabel:SetText("to reach")
+	table.insert(row2Widgets, goalLabel)
 
 	floorDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
 	floorDropdown:SetSize(110, 24)
 	floorDropdown:SetPoint("LEFT", goalLabel, "RIGHT", 6, 0)
 	floorDropdown.disableSelectionText = true
+	table.insert(row2Widgets, floorDropdown)
 	floorDropdown:SetupMenu(function(_, rootDescription)
 		for _, track in ipairs(MythicLoot.TRACK_ORDER) do
 			rootDescription:CreateRadio(track,
@@ -863,6 +887,7 @@ local function CreateToolbar()
 	local statsLabel = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	statsLabel:SetPoint("LEFT", floorDropdown, "RIGHT", 24, 0)
 	statsLabel:SetText("Stats:")
+	table.insert(row2Widgets, statsLabel)
 
 	local ordinals = { "1st", "2nd", "3rd" }
 	local anchor = statsLabel
@@ -870,6 +895,7 @@ local function CreateToolbar()
 		local ord = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 		ord:SetText(ordinals[i])
 		ord:SetPoint("LEFT", anchor, "RIGHT", (i == 1) and 8 or 7, 0)
+		table.insert(row2Widgets, ord)
 
 		local dd = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
 		dd:SetSize(92, 24)
@@ -884,6 +910,7 @@ local function CreateToolbar()
 			end
 		end)
 		statDropdowns[i] = dd
+		table.insert(row2Widgets, dd)
 		anchor = dd
 	end
 	UpdateStatDropdowns()
@@ -914,8 +941,36 @@ local function CreateToolbar()
 	scaleLabel:SetText("Scale")
 
 	banner = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	banner:SetPoint("TOPLEFT", 14, -94)
+	banner:SetPoint("TOPLEFT", 14, BANNER_Y)
 	banner:SetJustifyH("LEFT")
+end
+
+-- Show/hide the collapsible second row and reflow the banner, header, list, and
+-- window to match. The list keeps its height; the window grows/shrinks by
+-- ROW2_SPAN. State persists account-wide.
+function ApplyToolsCollapse(collapsed)
+	collapsed = collapsed or false
+	MythicLootGlobalDB.toolsCollapsed = collapsed
+	for _, w in ipairs(row2Widgets) do
+		w:SetShown(not collapsed)
+	end
+
+	local shift = collapsed and ROW2_SPAN or 0
+	banner:ClearAllPoints()
+	banner:SetPoint("TOPLEFT", 14, BANNER_Y + shift)
+	headerFrame:ClearAllPoints()
+	headerFrame:SetPoint("TOPLEFT", 10, HEADER_Y + shift)
+	scrollFrame:ClearAllPoints()
+	scrollFrame:SetPoint("TOPLEFT", 10, SCROLL_TOP + shift)
+	scrollFrame:SetPoint("BOTTOMRIGHT", -32, SCROLL_BOTTOM)
+	window:SetHeight(WINDOW_HEIGHT - shift)
+
+	-- Standard collapsible-section box: minus when open (click to collapse),
+	-- plus when collapsed (click to expand).
+	local base = collapsed and "Interface\\Buttons\\UI-PlusButton" or "Interface\\Buttons\\UI-MinusButton"
+	collapseButton:SetNormalTexture(base .. "-Up")
+	collapseButton:SetPushedTexture(base .. "-Down")
+	collapseButton:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
 end
 
 local function CreateWindow()
@@ -989,6 +1044,9 @@ local function CreateWindow()
 	end)
 
 	MythicLoot.Journal:SetCallback(Render)
+
+	-- Apply the saved collapsed/expanded state (positions header, list, window).
+	ApplyToolsCollapse(MythicLootGlobalDB.toolsCollapsed)
 
 	-- Close on Escape like a normal game window.
 	tinsert(UISpecialFrames, "MythicLootWindow")
