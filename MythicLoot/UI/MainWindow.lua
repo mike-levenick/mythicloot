@@ -2,13 +2,13 @@ local ADDON_NAME, MythicLoot = ...
 
 -- Width is chosen so all 15 slot columns fit at once — no horizontal scroll,
 -- nothing runs off the right edge.
--- Three toolbar rows (specs/slots, Find Upgrades, Stat Priority) sit above the
--- list, so the height/header/scroll offsets leave room for all before the
--- column headers.
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 616
+-- Two toolbar rows (specs/slots, then Find Upgrades + Stat Priority share row 2)
+-- sit above the list, so the height/header/scroll offsets leave room for both
+-- before the column headers.
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 588
 -- User-adjustable overall scale, saved account-wide.
 local DEFAULT_SCALE, MIN_SCALE, MAX_SCALE, SCALE_STEP = 1.15, 0.8, 1.6, 0.05
-local SCROLL_TOP, SCROLL_BOTTOM = -174, 12
+local SCROLL_TOP, SCROLL_BOTTOM = -146, 12
 local LIST_WIDTH = WINDOW_WIDTH - 42
 
 -- Every row is one fixed-height line: [dungeon icon][name][slot grid][badge].
@@ -24,7 +24,7 @@ local CELL_SIZE, CELL_GAP = 26, 4
 local CELL = CELL_SIZE + CELL_GAP
 local BADGE_RESERVE = 70 -- right-side room kept clear for the coverage badge
 local HEADER_CELL = CELL_SIZE
-local HEADER_Y = -144
+local HEADER_Y = -116
 
 local COLOR_FULL = "|cff33ff66"
 local COLOR_PARTIAL = "|cffffd100"
@@ -857,11 +857,11 @@ local function CreateToolbar()
 	end)
 	floorDropdown:SetText(GetTrackFloor())
 
-	-- Third row: Stat Priority (min-max lens). Three ranked dropdowns; a stat
-	-- picked in one rank drops out of the others. Gold stars in the grid then
-	-- mark drops whose secondaries fit better than the player's equipped piece.
+	-- Stat Priority (min-max lens) shares row 2, to the right of the Find Upgrades
+	-- controls. Three ranked dropdowns; a stat picked in one rank drops out of the
+	-- others. Tier badges in the grid then grade drops by these stats.
 	local statsLabel = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	statsLabel:SetPoint("TOPLEFT", 14, -86)
+	statsLabel:SetPoint("LEFT", floorDropdown, "RIGHT", 24, 0)
 	statsLabel:SetText("Stats:")
 
 	local ordinals = { "1st", "2nd", "3rd" }
@@ -914,7 +914,7 @@ local function CreateToolbar()
 	scaleLabel:SetText("Scale")
 
 	banner = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	banner:SetPoint("TOPLEFT", 14, -122)
+	banner:SetPoint("TOPLEFT", 14, -94)
 	banner:SetJustifyH("LEFT")
 end
 
