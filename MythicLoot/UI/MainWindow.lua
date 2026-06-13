@@ -145,6 +145,12 @@ local cellPool, cellsInUse = {}, {}
 local headerPool, headersInUse = {}, {}
 local colHLPool, colHLInUse = {}, {} -- full-height column-highlight bands
 
+-- Teleport buttons are persistent (one per fixed rotation slot), not pooled:
+-- they're SecureActionButtons whose spell attribute can only be set out of
+-- combat, so we configure them once and let them scroll with the list.
+local teleportButtons = {}
+local teleportsNeedSetup = true
+
 local function CreateRow()
 	local row = CreateFrame("Frame", nil, scrollChild)
 	row:SetSize(LIST_WIDTH, ROW_HEIGHT)
@@ -363,6 +369,117 @@ local function UpdateColumnHighlights(columns, numCols, checkedSet, filtered)
 	end
 end
 
+-- ===== Teleports =====
+
+local function CreateTeleportButton()
+	local b = CreateFrame("Button", nil, scrollChild, "SecureActionButtonTemplate")
+	b:SetSize(DUNGEON_ICON, DUNGEON_ICON)
+	-- Sit above the pooled dungeon rows (same parent) so clicks land here.
+	b:SetFrameLevel(scrollChild:GetFrameLevel() + 10)
+	-- Register both edges so the cast fires regardless of the client's
+	-- cast-on-key-down setting; the secure framework triggers only the right one.
+	b:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
+	b:SetAttribute("type", "spell")
+	b:SetAttribute("unit", "player")
+
+	-- Blue frame marks "you know this teleport — click to use it".
+	b.Glow = b:CreateTexture(nil, "BACKGROUND")
+	b.Glow:SetPoint("TOPLEFT", -2, 2)
+	b.Glow:SetPoint("BOTTOMRIGHT", 2, -2)
+	b.Glow:SetColorTexture(0.2, 0.6, 1.0, 0.9)
+
+	b.Icon = b:CreateTexture(nil, "ARTWORK")
+	b.Icon:SetAllPoints()
+	b.Icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+	b.Cooldown = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
+	b.Cooldown:SetAllPoints()
+
+	local hl = b:CreateTexture(nil, "HIGHLIGHT")
+	hl:SetAllPoints()
+	hl:SetColorTexture(1, 1, 1, 0.25)
+
+	b:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetSpellByID(self.spellID)
+		GameTooltip:AddLine("Click to teleport to " .. (self.dungeonName or ""), 0.3, 0.8, 1)
+		GameTooltip:Show()
+	end)
+	b:SetScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
+
+	return b
+end
+
+local function SetTeleportCooldown(b)
+	local cd = C_Spell.GetSpellCooldown(b.spellID)
+	if cd then
+		b.Cooldown:SetCooldown(cd.startTime, cd.duration)
+	end
+end
+
+-- "Known" detection changed across patches; check every variant so learned
+-- teleports are reliably detected.
+local function HasTeleport(spellID)
+	if C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID) then return true end
+	if IsSpellKnownOrOverridesKnown and IsSpellKnownOrOverridesKnown(spellID) then return true end
+	if IsPlayerSpell and IsPlayerSpell(spellID) then return true end
+	if IsSpellKnown and IsSpellKnown(spellID) then return true end
+	return false
+end
+
+-- Position/configure a secure teleport button over each dungeon's icon, for
+-- dungeons whose teleport the player has learned. Secure attributes can only be
+-- set out of combat, so defer if we're locked down.
+local function ConfigureTeleports()
+	local rot = MythicLoot.Journal:GetRotation()
+	if not rot then return end
+	if InCombatLockdown() then
+		teleportsNeedSetup = true
+		return
+	end
+
+	for i, dungeon in ipairs(rot) do
+		local b = teleportButtons[i]
+		local spellID = MythicLoot.GetTeleportSpell(dungeon.challengeMapID)
+		if spellID and HasTeleport(spellID) then
+			if not b then
+				b = CreateTeleportButton()
+				teleportButtons[i] = b
+			end
+			b:ClearAllPoints()
+			b:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 6,
+				-((i - 1) * (ROW_HEIGHT + 2)) - (ROW_HEIGHT - DUNGEON_ICON) / 2)
+			b:SetAttribute("spell", spellID)
+			b.spellID = spellID
+			b.dungeonName = dungeon.name
+			b.Icon:SetTexture(dungeon.icon)
+			SetTeleportCooldown(b)
+			b:Show()
+		elseif b then
+			b:Hide()
+			b.spellID, b.dungeonName = nil, nil
+		end
+	end
+	-- Hide any buttons left over from a previously longer rotation.
+	for i, b in pairs(teleportButtons) do
+		if i > #rot then
+			b:Hide()
+			b.spellID, b.dungeonName = nil, nil
+		end
+	end
+	teleportsNeedSetup = false
+end
+
+local function UpdateTeleportCooldowns()
+	for _, b in pairs(teleportButtons) do
+		if b:IsShown() and b.spellID then
+			SetTeleportCooldown(b)
+		end
+	end
+end
+
 -- ===== Rendering =====
 
 local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, columns, numCols)
@@ -473,6 +590,10 @@ function Render()
 
 	scrollChild:SetHeight(math.max(y, 1))
 	status:SetText(anyLoading and "Loading dungeon loot…" or "")
+
+	if teleportsNeedSetup then
+		ConfigureTeleports()
+	end
 end
 
 -- ===== Window construction =====
@@ -635,8 +756,19 @@ local function CreateWindow()
 
 	window:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 	window:RegisterEvent("PLAYER_LOOT_SPEC_UPDATED")
-	window:SetScript("OnEvent", function()
-		if window:IsShown() then Render() end
+	window:RegisterEvent("SPELLS_CHANGED")          -- a teleport may have been learned
+	window:RegisterEvent("SPELL_UPDATE_COOLDOWN")   -- refresh teleport cooldown swipes
+	window:RegisterEvent("PLAYER_REGEN_ENABLED")    -- finish any teleport setup deferred by combat
+	window:SetScript("OnEvent", function(self, event)
+		if not self:IsShown() then return end
+		if event == "SPELL_UPDATE_COOLDOWN" then
+			UpdateTeleportCooldowns()
+		elseif event == "PLAYER_REGEN_ENABLED" then
+			if teleportsNeedSetup then ConfigureTeleports() end
+		else
+			if event == "SPELLS_CHANGED" then teleportsNeedSetup = true end
+			Render()
+		end
 	end)
 	window:SetScript("OnShow", function()
 		local classID, specID = GetSpecSelection()

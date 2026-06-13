@@ -12,4 +12,5 @@
 Core.lua
 Data/Slots.lua
 Data/Journal.lua
+Data/Teleports.lua
 UI/MainWindow.lua
