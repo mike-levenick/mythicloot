@@ -36,7 +36,12 @@ end)
 
 SLASH_MYTHICLOOT1 = "/mythicloot"
 SLASH_MYTHICLOOT2 = "/ml"
-SlashCmdList.MYTHICLOOT = function()
+SlashCmdList.MYTHICLOOT = function(msg)
+	msg = (msg or ""):lower():gsub("%s+", "")
+	if msg == "tracks" and MythicLoot.PrintGearTracks then
+		MythicLoot.PrintGearTracks()
+		return
+	end
 	MythicLoot:ToggleWindow()
 end
 
