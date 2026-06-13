@@ -717,19 +717,19 @@ local function CreateToolbar()
 	upgradesButton:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
 		GameTooltip:SetText("Find Upgrades")
-		GameTooltip:AddLine("Check the slots where your own gear is below the "
-			.. "track at right.", 0.8, 0.8, 0.8, true)
+		GameTooltip:AddLine("Check every slot whose own gear hasn't reached the "
+			.. "track at right yet.", 0.8, 0.8, 0.8, true)
 		GameTooltip:Show()
 	end)
 	upgradesButton:SetScript("OnLeave", GameTooltip_Hide)
 
-	local belowLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	belowLabel:SetPoint("LEFT", upgradesButton, "RIGHT", 8, 0)
-	belowLabel:SetText("below")
+	local goalLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	goalLabel:SetPoint("LEFT", upgradesButton, "RIGHT", 8, 0)
+	goalLabel:SetText("to reach")
 
 	floorDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
 	floorDropdown:SetSize(110, 24)
-	floorDropdown:SetPoint("LEFT", belowLabel, "RIGHT", 6, 0)
+	floorDropdown:SetPoint("LEFT", goalLabel, "RIGHT", 6, 0)
 	floorDropdown.disableSelectionText = true
 	floorDropdown:SetupMenu(function(_, rootDescription)
 		for _, track in ipairs(MythicLoot.TRACK_ORDER) do

@@ -17,7 +17,7 @@ How many of the checked Slots a given dungeon can drop for the Spec Selection (e
 The upgrade track of an equipped item, from lowest to highest: Explorer, Adventurer, Veteran, Champion, Hero, Myth. Read from the player's own equipped gear only — never the Spec Selection's. The "Other" Slot has no Gear Track.
 
 ### Track Floor
-A player-chosen threshold Gear Track (default Hero), persisted per character. A Slot is **Needed** when its equipped Gear Track is below the Floor — compared by track alone, never item level within a track. Empty Slots count as Needed. For the two paired Slots (Finger, Trinket) the Slot is Needed if *either* equipped item is below the Floor (rank by the weaker one). An empty Off Hand is *not* Needed while a two-handed weapon is equipped.
+A player-chosen threshold Gear Track (default Hero), persisted per character; the UI presents it as the track you want every slot **to reach**. A Slot is **Needed** when its equipped Gear Track is below the Floor — compared by track alone, never item level within a track. Empty Slots count as Needed. For the two paired Slots (Finger, Trinket) the Slot is Needed if *either* equipped item is below the Floor (rank by the weaker one). An empty Off Hand is *not* Needed while a two-handed weapon is equipped.
 
 ### Find Upgrades
 The one-click action that seeds the Slot Filter with exactly the player's Needed Slots, given the current Track Floor. It is a seed, not a live mode: it sets the Slot Filter once and the player may then adjust it by hand. All downstream display (Slot Coverage badges, column highlights, dimming) follows from the resulting Slot Filter with no separate visual state.
