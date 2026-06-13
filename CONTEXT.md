@@ -25,11 +25,11 @@ The one-click action that seeds the Slot Filter with exactly the player's Needed
 ### Stat Priority
 A player's ordered list of preferred secondary stats — Crit, Haste, Mastery, Versatility — set via 1st/2nd/3rd dropdowns. Persisted **per spec** (keyed by class+spec) per character. A stat picked in one rank can't be picked in another; unlisted stats have zero priority. The Stat Priority is the engine of a min-max lens that is independent of the Slot Filter and of Find Upgrades, and evaluates every Slot.
 
-### Stat Fit
-How well an item's secondary stats match the Stat Priority: a rank-weighted score where the 1st-priority stat outweighs the 2nd, the 2nd the 3rd, and unlisted stats add nothing. Read from the item via the game at runtime.
+### Stat Tier
+A graded rating of how well a loot item's *own* secondary stats match the Stat Priority, by stat presence: **Gold** (has both the 1st and 2nd priority stats), **Silver** (has the 1st only), **Bronze** (has the 2nd only), or none. It considers only the item's own secondaries — the player's equipped gear is not part of the comparison — and ignores item level and Gear Track entirely (this lens is for min-maxing secondaries, not for finding higher-item-level gear, which is Find Upgrades). If only one stat is prioritized, the ceiling is Silver.
 
-### Stat Improvement
-A Slot where some dungeon drop's Stat Fit beats the Stat Fit of the player's own equipped item in that Slot. It ignores item level and Gear Track entirely — the lens is for min-maxing secondaries once track upgrades are done, **not** for finding higher-item-level gear (that is Find Upgrades). A Stat Improvement is marked in the grid with a gold star, and its cell surfaces the best-fit drop for the Slot. Dungeons are never reordered; only marked.
+### Stat Star
+The grid mark for Stat Tier: each Slot's best-tier dungeon drop is surfaced in its cell and stamped with a bronze / silver / gold star. Dungeons are never reordered; only marked.
 
 ### Dungeon List
 The fixed, stable list of all Season Rotation dungeons. Every dungeon is always visible in the same order; filtering only changes highlight/dim state and Slot Coverage display, never membership or position.

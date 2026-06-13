@@ -1,4 +1,4 @@
-# 5. Stat Priority lens compares stat-fit, not item level or stat weights
+# 5. Stat Priority lens grades by stat presence, not item level or stat weights
 
 Date: 2026-06-13
 
@@ -17,32 +17,39 @@ higher-item-level, worse-stat one.
 
 WoW exposes no stat weights. They come from external simulation (e.g. SimC) per
 spec and even per build, change with tuning, and shipping/maintaining them is a
-project in itself. The game's own upgrade arrows sidestep this entirely by
-comparing **item level only**, which is exactly the axis a min-maxer hunting
-secondaries does *not* care about.
+project in itself. The game's own upgrade arrows sidestep this by comparing
+**item level only**, which is exactly the axis a min-maxer hunting secondaries
+does *not* care about.
+
+We first scoped this as a fit-vs-equipped comparison, but settled on a simpler,
+clearer model: grade each drop by which of the player's top stats it carries.
 
 ## Decision
 
-The Stat Priority lens scores an item purely by **stat fit**: a rank-weighted
-sum over the player's chosen secondaries (`C_Item.GetItemStats`), where a higher
-priority strictly dominates all lower ones combined. A Slot is flagged (gold
-star) when a drop's stat fit beats the **player's own equipped piece** in that
-Slot. Item level and Gear Track are deliberately ignored.
+The Stat Priority lens grades a drop by **stat presence** against the priority
+order, using the item's *own* secondaries (`C_Item.GetItemStats`):
 
-This makes the lens a focused tool: "once my item levels are sorted, which drops
-have better secondaries than what I'm wearing." It is explicitly *not* an upgrade
-calculator, and is separate from Find Upgrades (which is the item-level/track
-tool — see [[0004]] and CONTEXT.md).
+- **Gold** — has both the 1st and 2nd priority stats.
+- **Silver** — has the 1st only.
+- **Bronze** — has the 2nd only.
+- none otherwise.
+
+It does **not** consider the player's equipped gear, item level, or Gear Track.
+Each Slot's best-tier drop is surfaced in its grid cell and stamped with the
+corresponding star. This makes the lens a focused "which drops carry my stats,
+and how completely" tool — explicitly *not* an upgrade calculator, and separate
+from Find Upgrades (the item-level/track tool — see [[0004]] and CONTEXT.md).
 
 ## Consequences
 
 - No stat-weight data to ship or maintain; consistent with ADR 0002.
-- The lens can star a *lower*-item-level drop than what you wear — correct for
-  its purpose (secondary min-maxing), but it is not claiming overall superiority.
-  The player judges item level from the tooltip.
-- "Better fit" is comparative against equipped gear, so a slot with already-ideal
-  stats never lights up — no noise.
+- A drop can be starred even if the player already wears an equivalent piece —
+  intended: the lens shows where ideal-stat gear *exists*, and the player judges
+  item level from the tooltip.
+- Grading is by presence only, so it is robust and locale-independent; only the
+  four secondary-stat constants matter, and those are verified live via
+  `/ml stats` (same discipline as `/ml tracks`, ADR 0004).
+- A single-stat priority caps at Silver (no 2nd stat to complete Gold), which is
+  correct and needs no special case.
 - If stat weights are ever wanted, they would be a separate, opt-in layer; this
   decision does not preclude it.
-- Secondary-stat constants from `C_Item.GetItemStats` are verified live via
-  `/ml stats`, the same discipline as `/ml tracks` (ADR 0004).

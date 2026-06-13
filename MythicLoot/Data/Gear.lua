@@ -124,11 +124,6 @@ for _, stat in ipairs(SECONDARY_STATS) do
 	end
 end
 
--- Rank weights chosen so a higher priority strictly dominates all lower picks
--- combined (4 > 2 + 1): the presence of your #1 stat always outscores any mix
--- of lower-ranked stats.
-local RANK_WEIGHT = { 4, 2, 1 }
-
 -- Set { [statKey] = true } of the secondary stats present on an item link, or nil.
 local function ItemSecondaries(itemLink)
 	if not itemLink then return nil end
@@ -145,45 +140,21 @@ local function ItemSecondaries(itemLink)
 	return present
 end
 
-local function StatFitScore(secondaries, priority)
-	if not secondaries then return 0 end
-	local score = 0
-	for rank, statKey in ipairs(priority) do
-		if RANK_WEIGHT[rank] and secondaries[statKey] then
-			score = score + RANK_WEIGHT[rank]
-		end
-	end
-	return score
-end
-
--- Stat Fit of one loot item against an ordered priority array of stat keys.
-function MythicLoot.ItemStatFit(itemLink, priority)
-	return StatFitScore(ItemSecondaries(itemLink), priority)
-end
-
--- Baseline Stat Fit of the player's equipped gear per Slot. Paired Slots use the
--- WEAKER-fitting of the two equipped items (the one you'd replace); an empty Slot
--- is 0 (anything carrying your stats beats it). A Slot we can't act on (empty Off
--- Hand under a 2H weapon) is left nil so the UI skips it.
-function MythicLoot.GetEquippedStatFit(priority)
-	local fit = {}
-	for slotKey, invNames in pairs(SLOT_INV) do
-		if slotKey == "OffHand" then
-			local link = GetInventoryItemLink("player", InvID("SecondaryHandSlot"))
-			if link or not MainHandIsTwoHand() then
-				fit[slotKey] = StatFitScore(ItemSecondaries(link), priority)
-			end
-		else
-			local minFit
-			for _, name in ipairs(invNames) do
-				local f = StatFitScore(
-					ItemSecondaries(GetInventoryItemLink("player", InvID(name))), priority)
-				if not minFit or f < minFit then minFit = f end
-			end
-			fit[slotKey] = minFit
-		end
-	end
-	return fit
+-- Stat Tier of a loot item against the priority order, judged by the item's OWN
+-- secondaries (equipped gear is not considered): 3 = gold (has both #1 and #2),
+-- 2 = silver (has #1 only), 1 = bronze (has #2 only), 0 = none. If only one stat
+-- is prioritized, gold/bronze can't occur (no #2), so the ceiling is silver.
+function MythicLoot.ItemStatTier(itemLink, priority)
+	local first, second = priority[1], priority[2]
+	if not (first or second) then return 0 end
+	local sec = ItemSecondaries(itemLink)
+	if not sec then return 0 end
+	local has1 = first and sec[first]
+	local has2 = second and sec[second]
+	if has1 and has2 then return 3 end
+	if has1 then return 2 end
+	if has2 then return 1 end
+	return 0
 end
 
 -- Diagnostic (/ml tracks): dump each equipped item's track so the live,

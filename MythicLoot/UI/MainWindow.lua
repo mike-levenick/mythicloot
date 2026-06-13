@@ -31,6 +31,18 @@ local COLOR_PARTIAL = "|cffffd100"
 local COLOR_NONE = "|cffff4444"
 local COLOR_WARN = "|cffff8000"
 
+-- Stat Tier star: tints the light ReputationStar sprite. 1 bronze, 2 silver, 3 gold.
+local STAR_TINT = {
+	[1] = { 0.80, 0.50, 0.25 }, -- bronze: has your #2 stat
+	[2] = { 0.85, 0.85, 0.92 }, -- silver: has your #1 stat
+	[3] = { 1.00, 0.82, 0.00 }, -- gold:   has both
+}
+local STAR_TOOLTIP = {
+	[1] = "Bronze: has your #2 stat.",
+	[2] = "Silver: has your #1 stat.",
+	[3] = "Gold: has both your top stats.",
+}
+
 local window, specDropdown, slotDropdown, floorDropdown, banner, status, scaleReadout
 local statDropdowns = {} -- the three Stat Priority rank dropdowns (1st/2nd/3rd)
 local scrollFrame, scrollChild, headerFrame
@@ -312,7 +324,9 @@ local function CreateCell()
 	-- Gold star: this drop's secondary stats fit better than what you're wearing
 	-- (Stat Improvement). Sits in the top-left corner, clear of the icon center.
 	cell.Star = cell:CreateTexture(nil, "OVERLAY")
-	cell.Star:SetTexture("Interface\\COMMON\\FavoritesIcon")
+	-- Light star sprite (one quadrant of the sheet) so it tints true to each tier.
+	cell.Star:SetTexture("Interface\\COMMON\\ReputationStar")
+	cell.Star:SetTexCoord(0, 0.5, 0.5, 1)
 	cell.Star:SetSize(15, 15)
 	cell.Star:SetPoint("TOPLEFT", -3, 3)
 	cell.Star:Hide()
@@ -325,9 +339,8 @@ local function CreateCell()
 		else
 			GameTooltip:SetItemByID(self.itemID)
 		end
-		if self.statImprovement then
-			GameTooltip:AddLine("Better stat fit than your equipped "
-				.. (self.slotLabel or "item") .. ".", 1, 0.82, 0, true)
+		if self.statTier and self.statTier > 0 then
+			GameTooltip:AddLine(STAR_TOOLTIP[self.statTier], 1, 0.82, 0, true)
 		end
 		GameTooltip:Show()
 	end)
@@ -358,7 +371,7 @@ local function SetCellItem(cell, item, extra)
 	cell.Icon:SetTexture(item.icon or 134400) -- question-mark icon while uncached
 	cell.Icon:Show()
 	cell.Count:SetText(extra > 0 and ("+" .. extra) or "")
-	cell.statImprovement = false
+	cell.statTier = 0
 	cell.Star:Hide()
 end
 
@@ -368,8 +381,20 @@ local function SetCellEmpty(cell)
 	cell.Icon:Hide()
 	cell.Empty:Show()
 	cell.Count:SetText("")
-	cell.statImprovement = false
+	cell.statTier = 0
 	cell.Star:Hide()
+end
+
+-- Show this cell's Stat Tier star (1 bronze / 2 silver / 3 gold), or hide it.
+local function SetCellStar(cell, tier)
+	cell.statTier = tier
+	local tint = STAR_TINT[tier]
+	if tint then
+		cell.Star:SetVertexColor(tint[1], tint[2], tint[3])
+		cell.Star:Show()
+	else
+		cell.Star:Hide()
+	end
 end
 
 local function ReleaseAll()
@@ -589,7 +614,7 @@ end
 
 -- ===== Rendering =====
 
-local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, columns, numCols, statPriority, equippedFit)
+local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, columns, numCols, statPriority, statActive)
 	row.Icon:SetTexture(dungeon.icon)
 	row.Name:SetText(dungeon.name)
 	row.Bg:SetColorTexture(1, 1, 1, 0.04)
@@ -644,25 +669,22 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 		local slot = columns[i]
 		local cell = AcquireCell(row)
 		cell:SetPoint("LEFT", row, "LEFT", GRID_START_X + (i - 1) * CELL, 0)
-		cell.slotLabel = slot.label
 		local items = bySlot[slot.key]
 		if items then
-			-- With the Stat Priority lens on, surface this slot's best stat-fit
-			-- drop and star it when it beats the player's own equipped piece.
+			-- With the Stat Priority lens on, surface this slot's best-tier drop
+			-- and star it by tier (the item's own secondaries vs your priority).
 			local shown, extra = items[1], #items - 1
-			local improvement = false
-			if equippedFit and equippedFit[slot.key] ~= nil then
-				local best, bestScore = items[1], -1
+			local tier = 0
+			if statActive then
+				local best, bestTier = items[1], 0
 				for _, it in ipairs(items) do
-					local sc = MythicLoot.ItemStatFit(it.link, statPriority)
-					if sc > bestScore then best, bestScore = it, sc end
+					local t = MythicLoot.ItemStatTier(it.link, statPriority)
+					if t > bestTier then best, bestTier = it, t end
 				end
-				shown = best
-				improvement = bestScore > equippedFit[slot.key]
+				shown, tier = best, bestTier
 			end
 			SetCellItem(cell, shown, extra)
-			cell.statImprovement = improvement
-			cell.Star:SetShown(improvement)
+			SetCellStar(cell, tier)
 		else
 			SetCellEmpty(cell)
 		end
@@ -679,10 +701,10 @@ function Render()
 	UpdateBanner()
 	ReleaseAll()
 
-	-- Stat Priority lens: when set, compute the player's equipped per-slot stat
-	-- fit once so each row can star drops that fit better than what they wear.
+	-- Stat Priority lens: when set, each row stars its best-tier drop per slot
+	-- (bronze/silver/gold by the item's own secondaries vs the priority).
 	local statPriority = CompactStatPriority(GetStatPriority())
-	local equippedFit = (#statPriority > 0) and MythicLoot.GetEquippedStatFit(statPriority) or nil
+	local statActive = #statPriority > 0
 
 	-- The grid always shows every slot column in the same position, so items
 	-- never jump when the filter changes. Filtering only dims the non-selected
@@ -710,7 +732,7 @@ function Render()
 	for _, d in ipairs(data) do
 		local row = AcquireRow()
 		row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -y)
-		LayoutDungeonRow(row, d.info, d.loot, checkedList, checkedSet, columns, numCols, statPriority, equippedFit)
+		LayoutDungeonRow(row, d.info, d.loot, checkedList, checkedSet, columns, numCols, statPriority, statActive)
 		if not d.loot then
 			anyLoading = true
 		end
