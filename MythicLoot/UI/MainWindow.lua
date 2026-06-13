@@ -2,10 +2,12 @@ local ADDON_NAME, MythicLoot = ...
 
 -- Width is chosen so all 15 slot columns fit at once — no horizontal scroll,
 -- nothing runs off the right edge.
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 560
+-- Two toolbar rows (specs/slots, then Find Upgrades) sit above the list, so the
+-- height/header/scroll offsets leave room for both before the column headers.
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 588
 -- User-adjustable overall scale, saved account-wide.
 local DEFAULT_SCALE, MIN_SCALE, MAX_SCALE, SCALE_STEP = 1.15, 0.8, 1.6, 0.05
-local SCROLL_TOP, SCROLL_BOTTOM = -120, 12
+local SCROLL_TOP, SCROLL_BOTTOM = -146, 12
 local LIST_WIDTH = WINDOW_WIDTH - 42
 
 -- Every row is one fixed-height line: [dungeon icon][name][slot grid][badge].
@@ -21,14 +23,14 @@ local CELL_SIZE, CELL_GAP = 26, 4
 local CELL = CELL_SIZE + CELL_GAP
 local BADGE_RESERVE = 70 -- right-side room kept clear for the coverage badge
 local HEADER_CELL = CELL_SIZE
-local HEADER_Y = -90
+local HEADER_Y = -116
 
 local COLOR_FULL = "|cff33ff66"
 local COLOR_PARTIAL = "|cffffd100"
 local COLOR_NONE = "|cffff4444"
 local COLOR_WARN = "|cffff8000"
 
-local window, specDropdown, slotDropdown, banner, status, scaleReadout
+local window, specDropdown, slotDropdown, floorDropdown, banner, status, scaleReadout
 local scrollFrame, scrollChild, headerFrame
 local Render -- forward declaration
 
@@ -61,6 +63,36 @@ end
 local function SetSpecSelection(classID, specID)
 	MythicLootCharDB.spec = { classID = classID, specID = specID or 0 }
 	MythicLoot.Journal:RequestLoot(classID, specID or 0)
+	Render()
+end
+
+-- Track Floor for Find Upgrades; persists per character (see CONTEXT.md).
+local function GetTrackFloor()
+	return (MythicLootCharDB and MythicLootCharDB.trackFloor) or MythicLoot.DEFAULT_TRACK_FLOOR
+end
+
+local function SetTrackFloor(name)
+	MythicLootCharDB.trackFloor = name
+end
+
+-- One-click seed: replace the Slot Filter with exactly the player's own Slots
+-- whose equipped Gear Track is below the Track Floor. Only seeds keys that are
+-- real grid columns; everything downstream (badges, highlights) follows the
+-- resulting Slot Filter with no separate state.
+local function SeedNeededSlots()
+	local needed = MythicLoot.GetNeededSlots(GetTrackFloor())
+	wipe(MythicLootCharDB.slotFilter)
+	local count = 0
+	for key in pairs(needed) do
+		if MythicLoot.GetSlotByKey(key) then
+			MythicLootCharDB.slotFilter[key] = true
+			count = count + 1
+		end
+	end
+	if count == 0 then
+		print("|cff33ff66MythicLoot|r: nothing below "
+			.. GetTrackFloor() .. " track — you're caught up.")
+	end
 	Render()
 end
 
@@ -676,6 +708,41 @@ local function CreateToolbar()
 		SetSpecSelection(MythicLoot.GetLootSpec())
 	end)
 
+	-- Second row: seed the Slot Filter from the player's own under-floor gear.
+	local upgradesButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	upgradesButton:SetSize(110, 24)
+	upgradesButton:SetPoint("TOPLEFT", 10, -58)
+	upgradesButton:SetText("Find Upgrades")
+	upgradesButton:SetScript("OnClick", SeedNeededSlots)
+	upgradesButton:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+		GameTooltip:SetText("Find Upgrades")
+		GameTooltip:AddLine("Check the slots where your own gear is below the "
+			.. "track at right.", 0.8, 0.8, 0.8, true)
+		GameTooltip:Show()
+	end)
+	upgradesButton:SetScript("OnLeave", GameTooltip_Hide)
+
+	local belowLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	belowLabel:SetPoint("LEFT", upgradesButton, "RIGHT", 8, 0)
+	belowLabel:SetText("below")
+
+	floorDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
+	floorDropdown:SetSize(110, 24)
+	floorDropdown:SetPoint("LEFT", belowLabel, "RIGHT", 6, 0)
+	floorDropdown.disableSelectionText = true
+	floorDropdown:SetupMenu(function(_, rootDescription)
+		for _, track in ipairs(MythicLoot.TRACK_ORDER) do
+			rootDescription:CreateRadio(track,
+				function() return GetTrackFloor() == track end,
+				function()
+					SetTrackFloor(track)
+					floorDropdown:SetText(track)
+				end)
+		end
+	end)
+	floorDropdown:SetText(GetTrackFloor())
+
 	-- Scale controls, top-right (clear of the left-side dropdowns/buttons).
 	-- Stepper buttons rather than a drag slider: a click bumps the scale and the
 	-- button barely moves, whereas a slider would rescale itself mid-drag.
@@ -702,7 +769,7 @@ local function CreateToolbar()
 	scaleLabel:SetText("Scale")
 
 	banner = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	banner:SetPoint("TOPLEFT", 14, -68)
+	banner:SetPoint("TOPLEFT", 14, -94)
 	banner:SetJustifyH("LEFT")
 end
 
