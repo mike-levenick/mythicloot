@@ -2,12 +2,13 @@ local ADDON_NAME, MythicLoot = ...
 
 -- Width is chosen so all 15 slot columns fit at once — no horizontal scroll,
 -- nothing runs off the right edge.
--- Two toolbar rows (specs/slots, then Find Upgrades) sit above the list, so the
--- height/header/scroll offsets leave room for both before the column headers.
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 588
+-- Three toolbar rows (specs/slots, Find Upgrades, Stat Priority) sit above the
+-- list, so the height/header/scroll offsets leave room for all before the
+-- column headers.
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 616
 -- User-adjustable overall scale, saved account-wide.
 local DEFAULT_SCALE, MIN_SCALE, MAX_SCALE, SCALE_STEP = 1.15, 0.8, 1.6, 0.05
-local SCROLL_TOP, SCROLL_BOTTOM = -146, 12
+local SCROLL_TOP, SCROLL_BOTTOM = -174, 12
 local LIST_WIDTH = WINDOW_WIDTH - 42
 
 -- Every row is one fixed-height line: [dungeon icon][name][slot grid][badge].
@@ -23,14 +24,23 @@ local CELL_SIZE, CELL_GAP = 26, 4
 local CELL = CELL_SIZE + CELL_GAP
 local BADGE_RESERVE = 70 -- right-side room kept clear for the coverage badge
 local HEADER_CELL = CELL_SIZE
-local HEADER_Y = -116
+local HEADER_Y = -144
 
 local COLOR_FULL = "|cff33ff66"
 local COLOR_PARTIAL = "|cffffd100"
 local COLOR_NONE = "|cffff4444"
 local COLOR_WARN = "|cffff8000"
 
+-- Stat Tier badge uses the profession material-quality medallion atlas:
+-- Tier1 = bronze, Tier2 = silver, Tier3 = gold — matching our 1/2/3 tiers.
+local STAR_TOOLTIP = {
+	[1] = "Bronze: has your #2 stat.",
+	[2] = "Silver: has your #1 stat.",
+	[3] = "Gold: has both your top stats.",
+}
+
 local window, specDropdown, slotDropdown, floorDropdown, banner, status, scaleReadout
+local statDropdowns = {} -- the three Stat Priority rank dropdowns (1st/2nd/3rd)
 local scrollFrame, scrollChild, headerFrame
 local Render -- forward declaration
 
@@ -94,6 +104,63 @@ local function SeedNeededSlots()
 			.. GetTrackFloor() .. " track — you're caught up.")
 	end
 	Render()
+end
+
+-- Stat Priority is stored per spec (class+spec) per character; the comparison
+-- still uses the player's own equipped gear. The stored value is a (possibly
+-- sparse) 1..3 table of stat keys for the three rank dropdowns.
+local function StatKey()
+	local classID, specID = GetSpecSelection()
+	return classID .. "-" .. (specID or 0)
+end
+
+local function GetStatPriority()
+	MythicLootCharDB.statPriority = MythicLootCharDB.statPriority or {}
+	local key = StatKey()
+	local sel = MythicLootCharDB.statPriority[key]
+	if not sel then
+		sel = {}
+		MythicLootCharDB.statPriority[key] = sel
+	end
+	return sel
+end
+
+local function StatLabel(statKey)
+	for _, s in ipairs(MythicLoot.SECONDARY_STATS) do
+		if s.key == statKey then return s.label end
+	end
+	return statKey
+end
+
+-- The scoring engine wants a dense, ordered array; the stored selection may have
+-- gaps (a "—" in the middle), so compact it preserving rank order.
+local function CompactStatPriority(sel)
+	local p = {}
+	for i = 1, 3 do
+		if sel[i] then table.insert(p, sel[i]) end
+	end
+	return p
+end
+
+-- Assign rank i to a stat (or nil to clear), removing that stat from any other
+-- rank so it can't be double-picked. Render() refreshes the dropdown labels.
+local function SetStatRank(i, statKey)
+	local sel = GetStatPriority()
+	if statKey then
+		for j = 1, 3 do
+			if j ~= i and sel[j] == statKey then sel[j] = nil end
+		end
+	end
+	sel[i] = statKey
+	Render()
+end
+
+local function UpdateStatDropdowns()
+	if not statDropdowns[1] then return end
+	local sel = GetStatPriority()
+	for i = 1, 3 do
+		statDropdowns[i]:SetText(sel[i] and StatLabel(sel[i]) or "—")
+	end
 end
 
 -- Returns the checked Slots in canonical order, plus a key-set for matching.
@@ -250,6 +317,14 @@ local function CreateCell()
 	cell.Count = cell:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
 	cell.Count:SetPoint("BOTTOMRIGHT", 1, 0)
 
+	-- Gold star: this drop's secondary stats fit better than what you're wearing
+	-- (Stat Improvement). Sits in the top-left corner, clear of the icon center.
+	-- Stat Tier badge (profession material-quality medallion), atlas set per tier.
+	cell.Star = cell:CreateTexture(nil, "OVERLAY")
+	cell.Star:SetSize(16, 16)
+	cell.Star:SetPoint("TOPLEFT", -3, 3)
+	cell.Star:Hide()
+
 	cell:SetScript("OnEnter", function(self)
 		if not (self.link or self.itemID) then return end
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -257,6 +332,9 @@ local function CreateCell()
 			GameTooltip:SetHyperlink(self.link)
 		else
 			GameTooltip:SetItemByID(self.itemID)
+		end
+		if self.statTier and self.statTier > 0 then
+			GameTooltip:AddLine(STAR_TOOLTIP[self.statTier], 1, 0.82, 0, true)
 		end
 		GameTooltip:Show()
 	end)
@@ -287,6 +365,8 @@ local function SetCellItem(cell, item, extra)
 	cell.Icon:SetTexture(item.icon or 134400) -- question-mark icon while uncached
 	cell.Icon:Show()
 	cell.Count:SetText(extra > 0 and ("+" .. extra) or "")
+	cell.statTier = 0
+	cell.Star:Hide()
 end
 
 local function SetCellEmpty(cell)
@@ -295,6 +375,19 @@ local function SetCellEmpty(cell)
 	cell.Icon:Hide()
 	cell.Empty:Show()
 	cell.Count:SetText("")
+	cell.statTier = 0
+	cell.Star:Hide()
+end
+
+-- Show this cell's Stat Tier badge (1 bronze / 2 silver / 3 gold), or hide it.
+local function SetCellStar(cell, tier)
+	cell.statTier = tier
+	if tier and tier >= 1 and tier <= 3 then
+		cell.Star:SetAtlas("Professions-Icon-Quality-Tier" .. tier, false)
+		cell.Star:Show()
+	else
+		cell.Star:Hide()
+	end
 end
 
 local function ReleaseAll()
@@ -514,7 +607,7 @@ end
 
 -- ===== Rendering =====
 
-local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, columns, numCols)
+local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, columns, numCols, statPriority, statActive)
 	row.Icon:SetTexture(dungeon.icon)
 	row.Name:SetText(dungeon.name)
 	row.Bg:SetColorTexture(1, 1, 1, 0.04)
@@ -571,7 +664,22 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 		cell:SetPoint("LEFT", row, "LEFT", GRID_START_X + (i - 1) * CELL, 0)
 		local items = bySlot[slot.key]
 		if items then
-			SetCellItem(cell, items[1], #items - 1)
+			-- With the Stat Priority lens on, surface this slot's best-tier drop
+			-- and star it by tier (the item's own secondaries vs your priority).
+			local shown, extra = items[1], #items - 1
+			local tier = 0
+			-- "Other" is the non-gear catch-all (mounts, recipes, …) — never a Slot
+			-- to min-max, so it gets no Stat Badge even if an item carries secondaries.
+			if statActive and slot.key ~= "Other" then
+				local best, bestTier = items[1], 0
+				for _, it in ipairs(items) do
+					local t = MythicLoot.ItemStatTier(it.link, statPriority)
+					if t > bestTier then best, bestTier = it, t end
+				end
+				shown, tier = best, bestTier
+			end
+			SetCellItem(cell, shown, extra)
+			SetCellStar(cell, tier)
 		else
 			SetCellEmpty(cell)
 		end
@@ -584,8 +692,14 @@ function Render()
 	if not window or not window:IsShown() then return end
 
 	UpdateToolbarText()
+	UpdateStatDropdowns()
 	UpdateBanner()
 	ReleaseAll()
+
+	-- Stat Priority lens: when set, each row stars its best-tier drop per slot
+	-- (bronze/silver/gold by the item's own secondaries vs the priority).
+	local statPriority = CompactStatPriority(GetStatPriority())
+	local statActive = #statPriority > 0
 
 	-- The grid always shows every slot column in the same position, so items
 	-- never jump when the filter changes. Filtering only dims the non-selected
@@ -613,7 +727,7 @@ function Render()
 	for _, d in ipairs(data) do
 		local row = AcquireRow()
 		row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -y)
-		LayoutDungeonRow(row, d.info, d.loot, checkedList, checkedSet, columns, numCols)
+		LayoutDungeonRow(row, d.info, d.loot, checkedList, checkedSet, columns, numCols, statPriority, statActive)
 		if not d.loot then
 			anyLoading = true
 		end
@@ -743,6 +857,37 @@ local function CreateToolbar()
 	end)
 	floorDropdown:SetText(GetTrackFloor())
 
+	-- Third row: Stat Priority (min-max lens). Three ranked dropdowns; a stat
+	-- picked in one rank drops out of the others. Gold stars in the grid then
+	-- mark drops whose secondaries fit better than the player's equipped piece.
+	local statsLabel = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	statsLabel:SetPoint("TOPLEFT", 14, -86)
+	statsLabel:SetText("Stats:")
+
+	local ordinals = { "1st", "2nd", "3rd" }
+	local anchor = statsLabel
+	for i = 1, 3 do
+		local ord = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		ord:SetText(ordinals[i])
+		ord:SetPoint("LEFT", anchor, "RIGHT", (i == 1) and 8 or 7, 0)
+
+		local dd = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
+		dd:SetSize(92, 24)
+		dd:SetPoint("LEFT", ord, "RIGHT", 3, 0)
+		dd.disableSelectionText = true
+		dd:SetupMenu(function(_, rootDescription)
+			rootDescription:CreateButton("—", function() SetStatRank(i, nil) end)
+			for _, s in ipairs(MythicLoot.SECONDARY_STATS) do
+				rootDescription:CreateRadio(s.label,
+					function() return GetStatPriority()[i] == s.key end,
+					function() SetStatRank(i, s.key) end)
+			end
+		end)
+		statDropdowns[i] = dd
+		anchor = dd
+	end
+	UpdateStatDropdowns()
+
 	-- Scale controls, top-right (clear of the left-side dropdowns/buttons).
 	-- Stepper buttons rather than a drag slider: a click bumps the scale and the
 	-- button barely moves, whereas a slider would rescale itself mid-drag.
@@ -769,7 +914,7 @@ local function CreateToolbar()
 	scaleLabel:SetText("Scale")
 
 	banner = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	banner:SetPoint("TOPLEFT", 14, -94)
+	banner:SetPoint("TOPLEFT", 14, -122)
 	banner:SetJustifyH("LEFT")
 end
 

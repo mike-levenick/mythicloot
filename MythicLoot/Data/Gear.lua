@@ -104,6 +104,59 @@ function MythicLoot.GetNeededSlots(floorName)
 	return needed
 end
 
+-- ===== Secondary stat fit (Stat Priority lens, see CONTEXT.md) =====
+
+-- Our stat keys -> the C_Item.GetItemStats table keys that carry that stat.
+-- Versatility has shipped under more than one constant; accept both. Verify the
+-- live keys with /ml stats before trusting these.
+local SECONDARY_STATS = {
+	{ key = "Crit",    label = "Crit",    mods = { "ITEM_MOD_CRIT_RATING_SHORT" } },
+	{ key = "Haste",   label = "Haste",   mods = { "ITEM_MOD_HASTE_RATING_SHORT" } },
+	{ key = "Mastery", label = "Mastery", mods = { "ITEM_MOD_MASTERY_RATING_SHORT" } },
+	{ key = "Vers",    label = "Vers",    mods = { "ITEM_MOD_VERSATILITY", "ITEM_MOD_VERSATILITY_SHORT" } },
+}
+MythicLoot.SECONDARY_STATS = SECONDARY_STATS
+
+local MOD_TO_KEY = {}
+for _, stat in ipairs(SECONDARY_STATS) do
+	for _, mod in ipairs(stat.mods) do
+		MOD_TO_KEY[mod] = stat.key
+	end
+end
+
+-- Set { [statKey] = true } of the secondary stats present on an item link, or nil.
+local function ItemSecondaries(itemLink)
+	if not itemLink then return nil end
+	local stats = C_Item.GetItemStats(itemLink)
+	if not stats then return nil end
+	local present
+	for mod, value in pairs(stats) do
+		local key = MOD_TO_KEY[mod]
+		if key and value and value ~= 0 then
+			present = present or {}
+			present[key] = true
+		end
+	end
+	return present
+end
+
+-- Stat Tier of a loot item against the priority order, judged by the item's OWN
+-- secondaries (equipped gear is not considered): 3 = gold (has both #1 and #2),
+-- 2 = silver (has #1 only), 1 = bronze (has #2 only), 0 = none. If only one stat
+-- is prioritized, gold/bronze can't occur (no #2), so the ceiling is silver.
+function MythicLoot.ItemStatTier(itemLink, priority)
+	local first, second = priority[1], priority[2]
+	if not (first or second) then return 0 end
+	local sec = ItemSecondaries(itemLink)
+	if not sec then return 0 end
+	local has1 = first and sec[first]
+	local has2 = second and sec[second]
+	if has1 and has2 then return 3 end
+	if has1 then return 2 end
+	if has2 then return 1 end
+	return 0
+end
+
 -- Diagnostic (/ml tracks): dump each equipped item's track so the live,
 -- locale-independent trackStringID values can be verified against TRACK_ORDER.
 function MythicLoot.PrintGearTracks()
@@ -125,6 +178,34 @@ function MythicLoot.PrintGearTracks()
 				else
 					print("  " .. name .. ": no upgrade info  " .. link)
 				end
+			end
+		end
+	end
+end
+
+-- Diagnostic (/ml stats): dump each equipped item's raw ITEM_MOD_* stat keys, so
+-- the exact secondary-stat constants can be verified against SECONDARY_STATS.
+function MythicLoot.PrintGearStats()
+	print("|cff33ff66MythicLoot|r equipped secondary stats:")
+	for _, slotKey in ipairs({
+		"Head", "Neck", "Shoulder", "Cloak", "Chest", "Wrist", "Hand", "Waist",
+		"Legs", "Feet", "MainHand", "OffHand", "Finger", "Trinket",
+	}) do
+		for _, name in ipairs(SLOT_INV[slotKey]) do
+			local link = GetInventoryItemLink("player", InvID(name))
+			if not link then
+				print("  " .. name .. ": (empty)")
+			else
+				local stats = C_Item.GetItemStats(link)
+				local parts = {}
+				if stats then
+					for k, v in pairs(stats) do
+						if k:find("ITEM_MOD") then
+							table.insert(parts, k .. "=" .. tostring(v))
+						end
+					end
+				end
+				print("  " .. name .. ": " .. (#parts > 0 and table.concat(parts, ", ") or "(none)"))
 			end
 		end
 	end

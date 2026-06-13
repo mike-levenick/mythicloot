@@ -42,6 +42,10 @@ SlashCmdList.MYTHICLOOT = function(msg)
 		MythicLoot.PrintGearTracks()
 		return
 	end
+	if msg == "stats" and MythicLoot.PrintGearStats then
+		MythicLoot.PrintGearStats()
+		return
+	end
 	MythicLoot:ToggleWindow()
 end
 
