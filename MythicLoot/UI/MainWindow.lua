@@ -34,9 +34,9 @@ local COLOR_WARN = "|cffff8000"
 -- Stat Tier badge uses the profession material-quality medallion atlas:
 -- Tier1 = bronze, Tier2 = silver, Tier3 = gold — matching our 1/2/3 tiers.
 local STAR_TOOLTIP = {
-	[1] = "Bronze: has your #2 stat.",
-	[2] = "Silver: has your #1 stat.",
-	[3] = "Gold: has both your top stats.",
+	[1] = "Bronze: has a secondary stat you want.",
+	[2] = "Silver: has your top-priority stat.",
+	[3] = "Gold: has your top stat and a secondary.",
 }
 
 local window, specDropdown, slotDropdown, floorDropdown, banner, status, scaleReadout

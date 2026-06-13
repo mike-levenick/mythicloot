@@ -141,19 +141,24 @@ local function ItemSecondaries(itemLink)
 end
 
 -- Stat Tier of a loot item against the priority order, judged by the item's OWN
--- secondaries (equipped gear is not considered): 3 = gold (has both #1 and #2),
--- 2 = silver (has #1 only), 1 = bronze (has #2 only), 0 = none. If only one stat
--- is prioritized, gold/bronze can't occur (no #2), so the ceiling is silver.
+-- secondaries (equipped gear is not considered). The 2nd and 3rd priorities are
+-- weighted EQUALLY — together they form a "secondary" group:
+--   3 = gold   (has the 1st AND at least one of the 2nd/3rd)
+--   2 = silver (has the 1st only)
+--   1 = bronze (has a 2nd/3rd but not the 1st)
+--   0 = none
+-- With no 3rd set this reduces to "1st and 2nd"; with only the 1st set, silver
+-- is the ceiling.
 function MythicLoot.ItemStatTier(itemLink, priority)
-	local first, second = priority[1], priority[2]
-	if not (first or second) then return 0 end
+	local first, second, third = priority[1], priority[2], priority[3]
+	if not (first or second or third) then return 0 end
 	local sec = ItemSecondaries(itemLink)
 	if not sec then return 0 end
-	local has1 = first and sec[first]
-	local has2 = second and sec[second]
-	if has1 and has2 then return 3 end
-	if has1 then return 2 end
-	if has2 then return 1 end
+	local hasFirst = first and sec[first]
+	local hasSecondary = (second and sec[second]) or (third and sec[third])
+	if hasFirst and hasSecondary then return 3 end
+	if hasFirst then return 2 end
+	if hasSecondary then return 1 end
 	return 0
 end
 
