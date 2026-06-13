@@ -1,0 +1,15 @@
+## Interface: 120005
+## Title: MythicLoot
+## Notes: Mythic+ dungeon loot with multi-slot filtering — find the dungeons that cover all your missing pieces.
+## Author: mlev
+## Version: 0.1.0
+## IconTexture: Interface\Icons\INV_Box_02
+## Category-enUS: Dungeons & Raids
+## SavedVariables: MythicLootGlobalDB
+## SavedVariablesPerCharacter: MythicLootCharDB
+## AddonCompartmentFunc: MythicLoot_OnAddonCompartmentClick
+
+Core.lua
+Data/Slots.lua
+Data/Journal.lua
+UI/MainWindow.lua

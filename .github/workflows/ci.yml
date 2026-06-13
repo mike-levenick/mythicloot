@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.1 (matches the WoW client runtime)
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Syntax-check all addon Lua
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' f; do
+            echo "luac5.1 -p $f"
+            luac5.1 -p "$f"
+            count=$((count + 1))
+          done < <(find MythicLoot -name '*.lua' -print0)
+          echo "Checked $count Lua file(s)."
+          test "$count" -gt 0
