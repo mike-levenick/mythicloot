@@ -668,7 +668,9 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 			-- and star it by tier (the item's own secondaries vs your priority).
 			local shown, extra = items[1], #items - 1
 			local tier = 0
-			if statActive then
+			-- "Other" is the non-gear catch-all (mounts, recipes, …) — never a Slot
+			-- to min-max, so it gets no Stat Badge even if an item carries secondaries.
+			if statActive and slot.key ~= "Other" then
 				local best, bestTier = items[1], 0
 				for _, it in ipairs(items) do
 					local t = MythicLoot.ItemStatTier(it.link, statPriority)
