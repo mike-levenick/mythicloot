@@ -22,6 +22,15 @@ A player-chosen threshold Gear Track (default Hero), persisted per character; th
 ### Find Upgrades
 The one-click action that seeds the Slot Filter with exactly the player's Needed Slots, given the current Track Floor. It is a seed, not a live mode: it sets the Slot Filter once and the player may then adjust it by hand. All downstream display (Slot Coverage badges, column highlights, dimming) follows from the resulting Slot Filter with no separate visual state.
 
+### Stat Priority
+A player's ordered list of preferred secondary stats — Crit, Haste, Mastery, Versatility — set via 1st/2nd/3rd dropdowns. Persisted **per spec** (keyed by class+spec) per character. A stat picked in one rank can't be picked in another; unlisted stats have zero priority. The Stat Priority is the engine of a min-max lens that is independent of the Slot Filter and of Find Upgrades, and evaluates every Slot.
+
+### Stat Fit
+How well an item's secondary stats match the Stat Priority: a rank-weighted score where the 1st-priority stat outweighs the 2nd, the 2nd the 3rd, and unlisted stats add nothing. Read from the item via the game at runtime.
+
+### Stat Improvement
+A Slot where some dungeon drop's Stat Fit beats the Stat Fit of the player's own equipped item in that Slot. It ignores item level and Gear Track entirely — the lens is for min-maxing secondaries once track upgrades are done, **not** for finding higher-item-level gear (that is Find Upgrades). A Stat Improvement is marked in the grid with a gold star, and its cell surfaces the best-fit drop for the Slot. Dungeons are never reordered; only marked.
+
 ### Dungeon List
 The fixed, stable list of all Season Rotation dungeons. Every dungeon is always visible in the same order; filtering only changes highlight/dim state and Slot Coverage display, never membership or position.
 
