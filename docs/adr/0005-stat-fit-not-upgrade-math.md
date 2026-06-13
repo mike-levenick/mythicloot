@@ -36,7 +36,7 @@ order, using the item's *own* secondaries (`C_Item.GetItemStats`):
 
 It does **not** consider the player's equipped gear, item level, or Gear Track.
 Each Slot's best-tier drop is surfaced in its grid cell and stamped with the
-corresponding star. This makes the lens a focused "which drops carry my stats,
+matching profession material-quality medallion (bronze / silver / gold). This makes the lens a focused "which drops carry my stats,
 and how completely" tool — explicitly *not* an upgrade calculator, and separate
 from Find Upgrades (the item-level/track tool — see [[0004]] and CONTEXT.md).
 

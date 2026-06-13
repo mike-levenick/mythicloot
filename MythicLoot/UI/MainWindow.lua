@@ -31,12 +31,8 @@ local COLOR_PARTIAL = "|cffffd100"
 local COLOR_NONE = "|cffff4444"
 local COLOR_WARN = "|cffff8000"
 
--- Stat Tier star: tints the light ReputationStar sprite. 1 bronze, 2 silver, 3 gold.
-local STAR_TINT = {
-	[1] = { 0.80, 0.50, 0.25 }, -- bronze: has your #2 stat
-	[2] = { 0.85, 0.85, 0.92 }, -- silver: has your #1 stat
-	[3] = { 1.00, 0.82, 0.00 }, -- gold:   has both
-}
+-- Stat Tier badge uses the profession material-quality medallion atlas:
+-- Tier1 = bronze, Tier2 = silver, Tier3 = gold — matching our 1/2/3 tiers.
 local STAR_TOOLTIP = {
 	[1] = "Bronze: has your #2 stat.",
 	[2] = "Silver: has your #1 stat.",
@@ -323,11 +319,9 @@ local function CreateCell()
 
 	-- Gold star: this drop's secondary stats fit better than what you're wearing
 	-- (Stat Improvement). Sits in the top-left corner, clear of the icon center.
+	-- Stat Tier badge (profession material-quality medallion), atlas set per tier.
 	cell.Star = cell:CreateTexture(nil, "OVERLAY")
-	-- Light star sprite (one quadrant of the sheet) so it tints true to each tier.
-	cell.Star:SetTexture("Interface\\COMMON\\ReputationStar")
-	cell.Star:SetTexCoord(0, 0.5, 0.5, 1)
-	cell.Star:SetSize(15, 15)
+	cell.Star:SetSize(16, 16)
 	cell.Star:SetPoint("TOPLEFT", -3, 3)
 	cell.Star:Hide()
 
@@ -385,12 +379,11 @@ local function SetCellEmpty(cell)
 	cell.Star:Hide()
 end
 
--- Show this cell's Stat Tier star (1 bronze / 2 silver / 3 gold), or hide it.
+-- Show this cell's Stat Tier badge (1 bronze / 2 silver / 3 gold), or hide it.
 local function SetCellStar(cell, tier)
 	cell.statTier = tier
-	local tint = STAR_TINT[tier]
-	if tint then
-		cell.Star:SetVertexColor(tint[1], tint[2], tint[3])
+	if tier and tier >= 1 and tier <= 3 then
+		cell.Star:SetAtlas("Professions-Icon-Quality-Tier" .. tier, false)
 		cell.Star:Show()
 	else
 		cell.Star:Hide()

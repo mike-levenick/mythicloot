@@ -28,8 +28,8 @@ A player's ordered list of preferred secondary stats — Crit, Haste, Mastery, V
 ### Stat Tier
 A graded rating of how well a loot item's *own* secondary stats match the Stat Priority, by stat presence: **Gold** (has both the 1st and 2nd priority stats), **Silver** (has the 1st only), **Bronze** (has the 2nd only), or none. It considers only the item's own secondaries — the player's equipped gear is not part of the comparison — and ignores item level and Gear Track entirely (this lens is for min-maxing secondaries, not for finding higher-item-level gear, which is Find Upgrades). If only one stat is prioritized, the ceiling is Silver.
 
-### Stat Star
-The grid mark for Stat Tier: each Slot's best-tier dungeon drop is surfaced in its cell and stamped with a bronze / silver / gold star. Dungeons are never reordered; only marked.
+### Stat Badge
+The grid mark for Stat Tier: each Slot's best-tier dungeon drop is surfaced in its cell and stamped with the matching profession material-quality medallion — bronze, silver, or gold. Dungeons are never reordered; only marked.
 
 ### Dungeon List
 The fixed, stable list of all Season Rotation dungeons. Every dungeon is always visible in the same order; filtering only changes highlight/dim state and Slot Coverage display, never membership or position.
