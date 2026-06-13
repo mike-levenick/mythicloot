@@ -29,10 +29,13 @@ clearer model: grade each drop by which of the player's top stats it carries.
 The Stat Priority lens grades a drop by **stat presence** against the priority
 order, using the item's *own* secondaries (`C_Item.GetItemStats`):
 
-- **Gold** — has both the 1st and 2nd priority stats.
+- **Gold** — has the 1st *and* at least one of the 2nd/3rd.
 - **Silver** — has the 1st only.
-- **Bronze** — has the 2nd only.
+- **Bronze** — has a 2nd/3rd but not the 1st.
 - none otherwise.
+
+The 2nd and 3rd priorities are weighted equally (a "secondary" group); with no
+3rd set this reduces to "1st and 2nd".
 
 It does **not** consider the player's equipped gear, item level, or Gear Track.
 Each Slot's best-tier drop is surfaced in its grid cell and stamped with the
