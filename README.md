@@ -32,3 +32,8 @@ After that, `/reload` picks up code changes.
 
 No shipped loot data: everything is read from the in-game Encounter Journal
 at runtime (`docs/adr/0002`), so a new season needs no addon update.
+
+## License
+
+MIT — see [LICENSE](LICENSE). This is an original, clean-room implementation
+(`docs/adr/0001`); it shares no code or assets with Keystone Loot.
