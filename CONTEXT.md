@@ -11,7 +11,7 @@ An equipment slot on a character. The canonical list mirrors the Reference Addon
 The player's multi-selection of Slots — a dropdown whose entries toggle independently (multi-select), unlike the Reference Addon's single-choice radio list. A dungeon matches the Slot Filter if it drops an item for **any** checked Slot (OR semantics). Nothing checked means no filter (All Slots); the "All Slots" entry clears all checks. The Slot Filter never reorders or removes dungeons, and persists per character across sessions.
 
 ### Slot Coverage
-How many of the checked Slots a given dungeon can drop for the Spec Selection (e.g. "2 of 3"). Full coverage is highlighted with a badge; partial coverage shows its count; zero coverage dims the dungeon in place.
+How many of the checked Slots a given dungeon can drop for the Spec Selection (e.g. "2 of 3"). Full coverage is highlighted with a badge; partial coverage shows its count; zero coverage dims the dungeon in place. The denominator is always the number of checked Slots; the numerator counts only Slots whose drop **survives the active Loot Filter** — so tightening the Loot Filter lowers the count. Shown only while the Slot Filter has at least one Slot checked.
 
 ### Gear Track
 The upgrade track of an equipped item, from lowest to highest: Explorer, Adventurer, Veteran, Champion, Hero, Myth. Read from the player's own equipped gear only — never the Spec Selection's. The "Other" Slot has no Gear Track.
@@ -23,13 +23,36 @@ A player-chosen threshold Gear Track (default Hero), persisted per character; th
 The action that seeds the Slot Filter with exactly the player's Needed Slots, given the chosen Track Floor. Triggered by picking a track from the Find Upgrades dropdown — selecting a track both sets the Track Floor and seeds in one move (there is no separate button). It is a seed, not a live mode: it sets the Slot Filter once and the player may then adjust it by hand. All downstream display (Slot Coverage badges, column highlights, dimming) follows from the resulting Slot Filter with no separate visual state.
 
 ### Stat Priority
-A player's ordered list of preferred secondary stats — Crit, Haste, Mastery, Versatility — set via 1st/2nd/3rd dropdowns. Persisted **per spec** (keyed by class+spec) per character. A stat picked in one rank can't be picked in another; unlisted stats have zero priority. The Stat Priority is the engine of a min-max lens that is independent of the Slot Filter and of Find Upgrades, and evaluates every Slot.
+A player's ordered list of preferred secondary stats — Crit, Haste, Mastery, Versatility — set via 1st/2nd dropdowns. Persisted **per spec** (keyed by class+spec) per character. A stat picked in one rank can't be picked in another; unlisted stats have zero priority. The Stat Priority is the engine of a min-max lens that is independent of the Slot Filter and of Find Upgrades, and evaluates every Slot. To explore other secondaries, the player swaps the 1st/2nd picks ("shop around").
 
 ### Stat Tier
-A graded rating of how well a loot item's *own* secondary stats match the Stat Priority, by stat presence. The 2nd and 3rd priorities are weighted **equally** as a "secondary" group: **Gold** (has the 1st *and* at least one of the 2nd/3rd), **Silver** (has the 1st only), **Bronze** (has a 2nd/3rd but not the 1st), or none. It considers only the item's own secondaries — the player's equipped gear is not part of the comparison — and ignores item level and Gear Track entirely (this lens is for min-maxing secondaries, not for finding higher-item-level gear, which is Find Upgrades). With no 3rd set this reduces to "1st and 2nd"; with only the 1st set, the ceiling is Silver.
+A graded rating of how well a loot item's *own* secondary stats match the Stat Priority, by stat presence: **Gold** (has the 1st *and* the 2nd), **Silver** (has the 1st only), **Bronze** (has the 2nd but not the 1st), or none. It considers only the item's own secondaries — the player's equipped gear is not part of the comparison — and ignores item level and Gear Track entirely (this lens is for min-maxing secondaries, not for finding higher-item-level gear, which is Find Upgrades). With only the 1st set, the ceiling is Silver.
 
 ### Stat Badge
-The grid mark for Stat Tier: each Slot's best-tier dungeon drop is surfaced in its cell and stamped with the matching profession material-quality medallion — bronze, silver, or gold. Dungeons are never reordered; only marked.
+The grid mark for Stat Tier: a Cell stamps its Shown Drop with the matching profession material-quality medallion — bronze, silver, or gold (top-left corner). Dungeons are never reordered; only marked.
+
+### Drop
+A single loot item a dungeon can yield for a Slot. One Slot/dungeon Cell can have several Drops (e.g. four trinkets from one dungeon). Drops are keyed by item, and the same Drop can appear in more than one dungeon.
+
+### Cell
+The grid square at one dungeon × one Slot. A Cell holds all of that Slot's Drops but displays exactly **one** at a time — the Shown Drop. A `+N` mark notes how many further Drops are hidden behind it.
+
+### Shown Drop
+The single Drop a Cell currently displays. Chosen by the active Loot Filter: under **All**, it is the Pin if set, else the highest-tier Favorite, else the best Stat Tier Drop; under a **tier** filter it is the best Stat Tier Drop; under **Favorited** it is the Favorite. The Cell's Stat Tier star and Favorite heart always describe the Shown Drop.
+
+### Drop Picker
+The submenu opened from a Cell that lists every Drop in it. From here a player can inspect each Drop, Favorite any of them, link any to chat, and Pin one as the Cell's everyday Shown Drop. The exact click bindings are tuned in-game.
+
+### Favorite
+A player's mark on a particular Drop ("I want this piece"), keyed by item and persisted **per spec** (class+spec) per character — the same key as Stat Priority — because different specs want different items. A Favorited Drop wears a heart in the Cell's bottom-left corner (clear of the top-left star). Favorites surface in the All view (a Cell prefers to show a Favorite) and are isolated by the Favorited Loot Filter.
+
+### Pin
+A player's explicit choice of which Drop a Cell shows, persisted per spec per character. In the **All** view a Pin always wins. Under a Loot Filter, the Cell's lit/dim state and its Slot Coverage still follow whether *any* Drop qualifies (so the lens stays truthful), but if the pinned Drop *itself* qualifies it wins which Drop shows — so re-pinning updates the grid live rather than only after the filter is cleared.
+
+### Loot Filter
+A single-choice lens over the grid, replacing the old 3rd Stat Priority dropdown: **All** (off, the default), **Bronze & up**, **Silver & up**, **Gold only**, or **Favorited**. It dims every Cell whose Shown Drop fails the chosen criterion (combining with the Slot Filter — a Cell must pass both to stay lit) and feeds the Slot Coverage numerator. It never reorders or removes dungeons. An active Loot Filter chooses each Cell's Shown Drop (best Stat Tier for the tier modes, the Favorite for Favorited) rather than the All-view Favorite preference — but a Pin whose Drop also qualifies the filter still wins which Drop shows (see Pin).
+
+An option is only offered when the data it reads exists: the tier modes need a Stat Priority set, and Favorited needs at least one Favorite. Unmet options are greyed out with a tooltip saying what to do; a selected option whose data later disappears (e.g. switching to a spec with no Stat Priority) falls back to **All** so the grid never blanks.
 
 ### Dungeon List
 The fixed, stable list of all Season Rotation dungeons. Every dungeon is always visible in the same order; filtering only changes highlight/dim state and Slot Coverage display, never membership or position.

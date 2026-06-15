@@ -5,8 +5,9 @@
 *.swp
 *~
 
-# Local Claude settings
-.claude/
+# Claude: keep shared project skills, ignore everything else (local settings)
+.claude/*
+!.claude/skills/
 
 # Packaged builds
 *.zip
