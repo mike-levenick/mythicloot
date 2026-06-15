@@ -6,11 +6,19 @@ local ADDON_NAME, MythicLoot = ...
 -- collapsible. The geometry here is the EXPANDED layout; collapsing hides row 2
 -- and shifts the banner/header/list up by ROW2_SPAN, shrinking the window to
 -- match (see ApplyToolsCollapse). The list keeps the same height either way.
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 588
-local ROW2_SPAN = 34 -- vertical space row 2 occupies; reclaimed when collapsed
--- User-adjustable overall scale, saved account-wide.
-local DEFAULT_SCALE, MIN_SCALE, MAX_SCALE, SCALE_STEP = 1.15, 0.8, 1.6, 0.05
-local SCROLL_TOP, SCROLL_BOTTOM = -138, 12
+-- Height is not fixed: the list never scrolls, so the window is sized to hug the
+-- dungeon rows exactly (Render refits it once the rotation is known).
+-- DEFAULT_WINDOW_HEIGHT fits the usual ~8-dungeon rotation so it opens tight
+-- before data even loads.
+local WINDOW_WIDTH = 760
+local DEFAULT_WINDOW_HEIGHT = 550
+local MIN_WINDOW_HEIGHT = 300
+local ROW2_SPAN = 40 -- vertical space row 2 occupies; reclaimed when collapsed
+local BANNER_SPAN = 18 -- extra height reserved for the wrong-spec banner, only when shown
+-- Overall UI scale, locked for now (was a user stepper; may return later).
+local UI_SCALE = 1.25
+-- SCROLL_BOTTOM keeps a strip clear at the bottom for the footer bar.
+local SCROLL_TOP, SCROLL_BOTTOM = -132, 28
 local LIST_WIDTH = WINDOW_WIDTH - 42
 
 -- Every row is one fixed-height line: [dungeon icon][name][slot grid][badge].
@@ -26,8 +34,10 @@ local CELL_SIZE, CELL_GAP = 26, 4
 local CELL = CELL_SIZE + CELL_GAP
 local BADGE_RESERVE = 70 -- right-side room kept clear for the coverage badge
 local HEADER_CELL = CELL_SIZE
-local HEADER_Y = -110
-local BANNER_Y = -94
+local HEADER_Y = -104
+-- Toolbar rows start clear of the frame's top-left portrait; the list/header
+-- below the portrait stay at the full-left margin (10).
+local TOOLBAR_LEFT = 60
 
 local COLOR_FULL = "|cff33ff66"
 local COLOR_PARTIAL = "|cffffd100"
@@ -42,27 +52,14 @@ local STAR_TOOLTIP = {
 	[3] = "Gold: has your top stat and a secondary.",
 }
 
-local window, specDropdown, slotDropdown, floorDropdown, banner, status, scaleReadout
+local window, specDropdown, slotDropdown, floorDropdown, banner, status
+local windowHeight = DEFAULT_WINDOW_HEIGHT -- mutable; refit to the row count once loaded
+local bannerShown = false -- whether the wrong-spec banner is currently reserving a line
 local statDropdowns = {} -- the three Stat Priority rank dropdowns (1st/2nd/3rd)
 local row2Widgets = {}   -- every widget on the collapsible second row
 local collapseButton     -- row-1 toggle that shows/hides row 2
 local scrollFrame, scrollChild, headerFrame
-local Render, ApplyToolsCollapse -- forward declarations
-
--- ===== Scale =====
-
-local function GetScale()
-	return (MythicLootGlobalDB and MythicLootGlobalDB.scale) or DEFAULT_SCALE
-end
-
-local function ApplyScale(value)
-	value = math.max(MIN_SCALE, math.min(MAX_SCALE, value))
-	MythicLootGlobalDB.scale = value
-	if window then window:SetScale(value) end
-	if scaleReadout then
-		scaleReadout:SetText(math.floor(value * 100 + 0.5) .. "%")
-	end
-end
+local Render, ApplyToolsCollapse, ApplyLayout -- forward declarations
 
 -- ===== Per-character state =====
 
@@ -234,11 +231,17 @@ end
 local function UpdateBanner()
 	local classID, specID = GetSpecSelection()
 	local playingClass, playingSpec = MythicLoot.GetPlayingSpec()
-	if classID == playingClass and specID == playingSpec then
-		banner:SetText("")
-	else
+	local wrong = not (classID == playingClass and specID == playingSpec)
+	if wrong then
 		banner:SetText(COLOR_WARN .. "Viewing:|r " .. SpecText(classID, specID)
 			.. COLOR_WARN .. " — not your current spec|r")
+	else
+		banner:SetText("")
+	end
+	-- Reserve/release the banner's line when its visibility changes.
+	if wrong ~= bannerShown then
+		bannerShown = wrong
+		if ApplyLayout then ApplyLayout() end
 	end
 end
 
@@ -261,6 +264,15 @@ local function CreateRow()
 
 	row.Bg = row:CreateTexture(nil, "BACKGROUND")
 	row.Bg:SetAllPoints()
+
+	-- Thin separator along the row's bottom edge so rows read as distinct bands
+	-- instead of floating. Subtler than the column-header rule (0.15). Static on
+	-- the pooled frame; shown/hidden with the row.
+	row.Divider = row:CreateTexture(nil, "BORDER")
+	row.Divider:SetHeight(1)
+	row.Divider:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 0)
+	row.Divider:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -4, 0)
+	row.Divider:SetColorTexture(1, 1, 1, 0.08)
 
 	row.Icon = row:CreateTexture(nil, "ARTWORK")
 	row.Icon:SetSize(DUNGEON_ICON, DUNGEON_ICON)
@@ -429,7 +441,6 @@ local function CreateHeaderCell()
 	h.Icon = h:CreateTexture(nil, "ARTWORK")
 	h.Icon:SetPoint("TOPLEFT", 2, -2)
 	h.Icon:SetPoint("BOTTOMRIGHT", -2, 2)
-	h.Icon:SetVertexColor(1.5, 1.5, 1.5) -- brighten the dim slot silhouettes
 
 	h:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -742,6 +753,16 @@ function Render()
 	scrollChild:SetHeight(math.max(y, 1))
 	status:SetText(anyLoading and "Loading dungeon loot…" or "")
 
+	-- Size the window to hug the rows — the list never scrolls, so there's no
+	-- reason to leave dead space below the last dungeon. Chrome above/below the
+	-- list is fixed (|SCROLL_TOP| + SCROLL_BOTTOM); the rest is row content, plus
+	-- a touch of padding so the last row isn't flush against the bottom.
+	local desired = math.max(y + 6 + (-SCROLL_TOP + SCROLL_BOTTOM), MIN_WINDOW_HEIGHT)
+	if math.abs(desired - windowHeight) >= 1 then
+		windowHeight = desired
+		ApplyLayout()
+	end
+
 	if teleportsNeedSetup then
 		ConfigureTeleports()
 	end
@@ -767,7 +788,7 @@ end
 local function CreateToolbar()
 	specDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
 	specDropdown:SetSize(200, 26)
-	specDropdown:SetPoint("TOPLEFT", 10, -30)
+	specDropdown:SetPoint("TOPLEFT", TOOLBAR_LEFT, -30)
 	-- We manage dropdown text ourselves; stop the menu system overwriting it
 	-- with auto-composed selection text.
 	specDropdown.disableSelectionText = true
@@ -827,48 +848,28 @@ local function CreateToolbar()
 		SetSpecSelection(MythicLoot.GetLootSpec())
 	end)
 
-	-- Collapse toggle for row 2. Standard [-]/[+] box; lives on row 1 so it stays
-	-- visible when row 2 is hidden. Textures are set by ApplyToolsCollapse.
-	collapseButton = CreateFrame("Button", nil, window)
-	collapseButton:SetSize(24, 24)
-	collapseButton:SetPoint("LEFT", lootButton, "RIGHT", 10, 0)
-	collapseButton:SetScript("OnClick", function()
-		ApplyToolsCollapse(not MythicLootGlobalDB.toolsCollapsed)
-	end)
-	collapseButton:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-		GameTooltip:SetText(MythicLootGlobalDB.toolsCollapsed and "Show tools" or "Hide tools")
-		GameTooltip:AddLine("Find Upgrades and Stat Priority.", 0.8, 0.8, 0.8, true)
-		GameTooltip:Show()
-	end)
-	collapseButton:SetScript("OnLeave", GameTooltip_Hide)
-
-	-- Second row (collapsible): seed the Slot Filter from under-floor gear.
-	local upgradesButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-	upgradesButton:SetSize(110, 24)
-	upgradesButton:SetPoint("TOPLEFT", 10, -66)
-	upgradesButton:SetText("Find Upgrades")
-	upgradesButton:SetScript("OnClick", SeedNeededSlots)
-	table.insert(row2Widgets, upgradesButton)
-	upgradesButton:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
-		GameTooltip:SetText("Find Upgrades")
-		GameTooltip:AddLine("Check every slot whose own gear hasn't reached the "
-			.. "track at right yet.", 0.8, 0.8, 0.8, true)
-		GameTooltip:Show()
-	end)
-	upgradesButton:SetScript("OnLeave", GameTooltip_Hide)
-
-	local goalLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	goalLabel:SetPoint("LEFT", upgradesButton, "RIGHT", 8, 0)
-	goalLabel:SetText("to reach")
+	-- Second row (collapsible): the floor dropdown IS the Find Upgrades action.
+	-- Picking a track sets the goal and immediately seeds the Slot Filter from any
+	-- slot whose own gear hasn't reached it — no separate trigger button needed.
+	local goalLabel = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	goalLabel:SetPoint("TOPLEFT", TOOLBAR_LEFT, -74)
+	goalLabel:SetText("Find Upgrades to reach")
 	table.insert(row2Widgets, goalLabel)
 
 	floorDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
 	floorDropdown:SetSize(110, 24)
-	floorDropdown:SetPoint("LEFT", goalLabel, "RIGHT", 6, 0)
+	floorDropdown:SetPoint("LEFT", goalLabel, "RIGHT", 8, 0)
 	floorDropdown.disableSelectionText = true
 	table.insert(row2Widgets, floorDropdown)
+	floorDropdown:HookScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+		GameTooltip:SetText("Find Upgrades")
+		GameTooltip:AddLine("Pick the track you want every slot to reach. Slots whose "
+			.. "own gear is still below it get checked in the Slot Filter.",
+			0.8, 0.8, 0.8, true)
+		GameTooltip:Show()
+	end)
+	floorDropdown:HookScript("OnLeave", GameTooltip_Hide)
 	floorDropdown:SetupMenu(function(_, rootDescription)
 		for _, track in ipairs(MythicLoot.TRACK_ORDER) do
 			rootDescription:CreateRadio(track,
@@ -876,6 +877,7 @@ local function CreateToolbar()
 				function()
 					SetTrackFloor(track)
 					floorDropdown:SetText(track)
+					SeedNeededSlots()
 				end)
 		end
 	end)
@@ -915,33 +917,27 @@ local function CreateToolbar()
 	end
 	UpdateStatDropdowns()
 
-	-- Scale controls, top-right (clear of the left-side dropdowns/buttons).
-	-- Stepper buttons rather than a drag slider: a click bumps the scale and the
-	-- button barely moves, whereas a slider would rescale itself mid-drag.
-	local scaleUp = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-	scaleUp:SetSize(26, 24)
-	scaleUp:SetPoint("TOPRIGHT", -10, -30)
-	scaleUp:SetText("+")
-	scaleUp:SetScript("OnClick", function() ApplyScale(GetScale() + SCALE_STEP) end)
+	-- Advanced toggle, top-right (clear of the left-side dropdowns/buttons): shows
+	-- or hides row 2 (Find Upgrades + Stat Priority). Lives on row 1 so it stays
+	-- visible when row 2 is hidden. Label is set by ApplyToolsCollapse.
+	collapseButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	collapseButton:SetSize(110, 24)
+	collapseButton:SetPoint("TOPRIGHT", -10, -30)
+	collapseButton:SetScript("OnClick", function()
+		ApplyToolsCollapse(not MythicLootGlobalDB.toolsCollapsed)
+	end)
+	collapseButton:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+		GameTooltip:SetText("Advanced tools")
+		GameTooltip:AddLine("Find Upgrades and Stat Priority.", 0.8, 0.8, 0.8, true)
+		GameTooltip:Show()
+	end)
+	collapseButton:SetScript("OnLeave", GameTooltip_Hide)
 
-	scaleReadout = window:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	scaleReadout:SetPoint("RIGHT", scaleUp, "LEFT", -4, 0)
-	scaleReadout:SetWidth(40)
-	scaleReadout:SetJustifyH("CENTER")
-	scaleReadout:SetText(math.floor(GetScale() * 100 + 0.5) .. "%")
-
-	local scaleDown = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-	scaleDown:SetSize(26, 24)
-	scaleDown:SetPoint("RIGHT", scaleReadout, "LEFT", -4, 0)
-	scaleDown:SetText("−")
-	scaleDown:SetScript("OnClick", function() ApplyScale(GetScale() - SCALE_STEP) end)
-
-	local scaleLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	scaleLabel:SetPoint("RIGHT", scaleDown, "LEFT", -4, 0)
-	scaleLabel:SetText("Scale")
-
+	-- Spec-mismatch warning. Anchored later (in CreateWindow) to ride just above
+	-- the column header, so it tracks the header through collapse without needing
+	-- its own reserved band in the toolbar.
 	banner = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	banner:SetPoint("TOPLEFT", 14, BANNER_Y)
 	banner:SetJustifyH("LEFT")
 end
 
@@ -954,29 +950,42 @@ function ApplyToolsCollapse(collapsed)
 	for _, w in ipairs(row2Widgets) do
 		w:SetShown(not collapsed)
 	end
+	-- Label reflects what a click will do.
+	collapseButton:SetText(collapsed and "Show Advanced" or "Hide Advanced")
+	ApplyLayout()
+end
 
-	local shift = collapsed and ROW2_SPAN or 0
-	banner:ClearAllPoints()
-	banner:SetPoint("TOPLEFT", 14, BANNER_Y + shift)
+-- Position the header, list, window, and inset for the current collapse + banner
+-- state. Collapsing row 2 pulls everything UP by ROW2_SPAN (and shrinks the
+-- window); showing the wrong-spec banner pushes the header/list DOWN by
+-- BANNER_SPAN (and grows the window) so the banner gets its own line instead of
+-- crowding the header. The visible list height is unchanged either way.
+function ApplyLayout()
+	local shift = (MythicLootGlobalDB.toolsCollapsed and ROW2_SPAN or 0)
+	local banner_ = bannerShown and BANNER_SPAN or 0
+	local off = shift - banner_
 	headerFrame:ClearAllPoints()
-	headerFrame:SetPoint("TOPLEFT", 10, HEADER_Y + shift)
+	headerFrame:SetPoint("TOPLEFT", 10, HEADER_Y + off)
 	scrollFrame:ClearAllPoints()
-	scrollFrame:SetPoint("TOPLEFT", 10, SCROLL_TOP + shift)
+	scrollFrame:SetPoint("TOPLEFT", 10, SCROLL_TOP + off)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -32, SCROLL_BOTTOM)
-	window:SetHeight(WINDOW_HEIGHT - shift)
+	window:SetHeight(windowHeight - off)
 
-	-- Standard collapsible-section box: minus when open (click to collapse),
-	-- plus when collapsed (click to expand).
-	local base = collapsed and "Interface\\Buttons\\UI-PlusButton" or "Interface\\Buttons\\UI-MinusButton"
-	collapseButton:SetNormalTexture(base .. "-Up")
-	collapseButton:SetPushedTexture(base .. "-Down")
-	collapseButton:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
+	-- Recessed inset tracks the header so it keeps framing the list in all states.
+	if window.Inset then
+		window.Inset:ClearAllPoints()
+		window.Inset:SetPoint("TOPLEFT", window, "TOPLEFT", 8, -100 + off)
+		window.Inset:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 30)
+	end
 end
 
 local function CreateWindow()
-	window = CreateFrame("Frame", "MythicLootWindow", UIParent, "BasicFrameTemplateWithInset")
-	window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
-	window:SetScale(GetScale())
+	-- ButtonFrameTemplate: ornate gold border + portrait + a recessed Inset panel.
+	-- The list/header stay parented to `window` and render on top of the inset, so
+	-- the inset is purely the gray recess behind them (no coordinate-origin change).
+	window = CreateFrame("Frame", "MythicLootWindow", UIParent, "ButtonFrameTemplate")
+	window:SetSize(WINDOW_WIDTH, windowHeight)
+	window:SetScale(UI_SCALE)
 	window:SetFrameStrata("HIGH")
 	window:SetToplevel(true)
 	window:SetClampedToScreen(true)
@@ -988,9 +997,26 @@ local function CreateWindow()
 		self:StopMovingOrSizing()
 		SavePosition()
 	end)
-	if window.TitleText then
+	-- Title: PortraitFrame/ButtonFrame uses SetTitle; older templates use TitleText.
+	if window.SetTitle then
+		window:SetTitle("MythicLoot")
+	elseif window.TitleText then
 		window.TitleText:SetText("MythicLoot")
 	end
+
+	-- Portrait: the Mythic Keystone icon (inv_relics_hourglass), top-left — a crisp
+	-- 64px icon. To use custom art instead, ship a .tga/.blp under MythicLoot/Media
+	-- and point this at "Interface\\AddOns\\MythicLoot\\Media\\<file>" (no extension).
+	local portraitIcon = "Interface\\Icons\\inv_relics_hourglass"
+	if window.SetPortraitToAsset then
+		window:SetPortraitToAsset(portraitIcon)
+	elseif window.PortraitContainer and window.PortraitContainer.portrait then
+		window.PortraitContainer.portrait:SetTexture(portraitIcon)
+	end
+
+	-- The recessed inset is reframed to sit behind the header+list (clear of the
+	-- toolbar above and footer below) in ApplyToolsCollapse, so it tracks collapse.
+
 	RestorePosition()
 
 	CreateToolbar()
@@ -1010,16 +1036,41 @@ local function CreateWindow()
 	divider:SetHeight(1)
 	divider:SetColorTexture(1, 1, 1, 0.15)
 
+	-- Banner is vertically centered in the space above the header (it moves with
+	-- the header on collapse / banner-reserve).
+	banner:SetPoint("LEFT", headerFrame, "TOPLEFT", 4, 18)
+
 	scrollFrame = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
 	scrollFrame:SetPoint("TOPLEFT", 10, SCROLL_TOP)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -32, SCROLL_BOTTOM)
+	-- No scrollbar: the season list fits without scrolling, so the bar is just
+	-- visual noise. Hide it and keep it hidden if the template tries to reshow it.
+	local scrollBar = scrollFrame.ScrollBar
+	if scrollBar then
+		scrollBar:Hide()
+		scrollBar:SetScript("OnShow", scrollBar.Hide)
+	end
 	scrollChild = CreateFrame("Frame", nil, scrollFrame)
 	scrollChild:SetWidth(LIST_WIDTH)
 	scrollChild:SetHeight(1)
 	scrollFrame:SetScrollChild(scrollChild)
 
 	status = window:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-	status:SetPoint("BOTTOM", 0, 16)
+	status:SetPoint("BOTTOM", 0, 26)
+
+	-- Footer bar: a thin rule and a left-aligned addon name + version, read from
+	-- the .toc at runtime (C_AddOns is the 12.0 namespace; global is deprecated).
+	local footerRule = window:CreateTexture(nil, "ARTWORK")
+	footerRule:SetHeight(1)
+	footerRule:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 8, 22)
+	footerRule:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 22)
+	footerRule:SetColorTexture(1, 1, 1, 0.10)
+
+	local version = (C_AddOns and C_AddOns.GetAddOnMetadata
+		and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version")) or ""
+	local footer = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	footer:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 12, 8)
+	footer:SetText("MythicLoot" .. (version ~= "" and ("  v" .. version) or ""))
 
 	window:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 	window:RegisterEvent("PLAYER_LOOT_SPEC_UPDATED")
