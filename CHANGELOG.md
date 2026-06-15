@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Favorites** — right-click any slot cell to favorite the item shown there; a heart marks it in the cell's bottom-left corner. Favorites are saved per spec, per character, and can be isolated with the new "Favorited" filter.
+- **Multi-drop cells** — slots that drop several items (e.g. four trinkets from one dungeon) are no longer collapsed to one. Left-click a cell to open the Drop Picker and choose which drop it shows; favorite any of them with a right-click once shown. The choice is saved per spec, per character.
+- **Loot Filter** — a new "Show:" lens (All / Bronze & up / Silver & up / Gold only / Favorited) dims the loot that doesn't match and adjusts each dungeon's coverage count to suit. Saved per character.
+- **Reset button** — one click returns to your current spec with all slots shown and no track or loot filter. Your favorites and pins are kept.
+
+### Changed
+
+- **Stat Priority** is now two stats (1st + 2nd) instead of three — early feedback found three confusing. Gold means a drop has both your stats; swap your picks to shop around. (ADR 0006)
+- **Find Upgrades** dropdown is now labelled "Help me reach", gained a "—" entry, and shows "—" whenever you edit the slot selection by hand — so it never implies you're filtering for a track when you aren't.
+
 ## v1.0.0 — Initial release
 
 First public release of MythicLoot.
