@@ -38,6 +38,8 @@ local HEADER_Y = -104
 -- Toolbar rows start clear of the frame's top-left portrait; the list/header
 -- below the portrait stay at the full-left margin (10).
 local TOOLBAR_LEFT = 60
+-- Row 2 sits below the portrait, so it doesn't need row 1's indent to clear it.
+local ROW2_LEFT = 12
 
 local COLOR_FULL = "|cff33ff66"
 local COLOR_PARTIAL = "|cffffd100"
@@ -47,15 +49,33 @@ local COLOR_WARN = "|cffff8000"
 -- Stat Tier badge uses the profession material-quality medallion atlas:
 -- Tier1 = bronze, Tier2 = silver, Tier3 = gold — matching our 1/2/3 tiers.
 local STAR_TOOLTIP = {
-	[1] = "Bronze: has a secondary stat you want.",
+	[1] = "Bronze: has your 2nd-priority stat.",
 	[2] = "Silver: has your top-priority stat.",
-	[3] = "Gold: has your top stat and a secondary.",
+	[3] = "Gold: has both of your priority stats.",
 }
+
+-- Heart marking a Favorited drop. Bottom-left of the cell, clear of the
+-- top-left Stat Tier star and the bottom-right "+N" count. Texture is the
+-- long-standing friendship heart; swap freely if a better atlas turns up.
+local HEART_TEXTURE = "Interface\\COMMON\\friendship-heart"
+
+-- The Loot Filter (replaces the old 3rd Stat Priority dropdown, ADR 0006): a
+-- single lens dimming Cells whose Shown Drop fails the criterion. Persists per
+-- character; defaults to "all".
+local LOOT_FILTERS = {
+	{ key = "all",       label = "All Loot" },
+	{ key = "bronze",    label = "Bronze & up" },
+	{ key = "silver",    label = "Silver & up" },
+	{ key = "gold",      label = "Gold only" },
+	{ key = "favorited", label = "Favorited" },
+}
+local LOOT_FILTER_MINTIER = { bronze = 1, silver = 2, gold = 3 }
 
 local window, specDropdown, slotDropdown, floorDropdown, banner, status
 local windowHeight = DEFAULT_WINDOW_HEIGHT -- mutable; refit to the row count once loaded
 local bannerShown = false -- whether the wrong-spec banner is currently reserving a line
-local statDropdowns = {} -- the three Stat Priority rank dropdowns (1st/2nd/3rd)
+local statDropdowns = {} -- the two Stat Priority rank dropdowns (1st/2nd)
+local filterDropdown     -- the Loot Filter lens (All / tier / Favorited)
 local row2Widgets = {}   -- every widget on the collapsible second row
 local collapseButton     -- row-1 toggle that shows/hides row 2
 local scrollFrame, scrollChild, headerFrame
@@ -89,6 +109,22 @@ end
 
 -- One-click seed: replace the Slot Filter with exactly the player's own Slots
 -- whose equipped Gear Track is below the Track Floor. Only seeds keys that are
+-- The "Help me reach" dropdown shows the track that last seeded the Slot Filter,
+-- or "—" when the current slots aren't tied to a track (the player edited them by
+-- hand, or never used it). This is a transient display hint, not persisted.
+local activeFloor
+
+local function UpdateFloorDropdown()
+	if floorDropdown then floorDropdown:SetText(activeFloor or "—") end
+end
+
+-- Called whenever the Slot Filter is touched by hand, so the dropdown stops
+-- claiming the slots reflect a track.
+local function ClearActiveFloor()
+	activeFloor = nil
+	UpdateFloorDropdown()
+end
+
 -- real grid columns; everything downstream (badges, highlights) follows the
 -- resulting Slot Filter with no separate state.
 local function SeedNeededSlots()
@@ -110,10 +146,65 @@ end
 
 -- Stat Priority is stored per spec (class+spec) per character; the comparison
 -- still uses the player's own equipped gear. The stored value is a (possibly
--- sparse) 1..3 table of stat keys for the three rank dropdowns.
+-- sparse) 1..2 table of stat keys for the two rank dropdowns (ADR 0006).
 local function StatKey()
 	local classID, specID = GetSpecSelection()
 	return classID .. "-" .. (specID or 0)
+end
+
+-- Favorites and Pins share the Stat Priority key (per spec, per character): a
+-- Guardian druid and a Balance druid want different items, so their wishlists
+-- and pins are kept separate (see CONTEXT.md).
+local function GetFavorites()
+	MythicLootCharDB.favorites = MythicLootCharDB.favorites or {}
+	local key = StatKey()
+	local set = MythicLootCharDB.favorites[key]
+	if not set then set = {}; MythicLootCharDB.favorites[key] = set end
+	return set
+end
+
+local function IsFavorite(itemID)
+	return itemID ~= nil and GetFavorites()[itemID] == true
+end
+
+local function ToggleFavorite(itemID)
+	if not itemID then return end
+	local set = GetFavorites()
+	set[itemID] = (not set[itemID]) or nil
+	Render()
+end
+
+-- A Pin records which Drop a Cell shows in the All view, keyed by dungeon
+-- (challengeMapID) + Slot. nil means "auto" (favorite, else best Stat Tier).
+local function GetPins()
+	MythicLootCharDB.pins = MythicLootCharDB.pins or {}
+	local key = StatKey()
+	local t = MythicLootCharDB.pins[key]
+	if not t then t = {}; MythicLootCharDB.pins[key] = t end
+	return t
+end
+
+local function PinKey(mapID, slotKey) return mapID .. ":" .. slotKey end
+
+local function GetPin(mapID, slotKey)
+	return GetPins()[PinKey(mapID, slotKey)]
+end
+
+local function SetPin(mapID, slotKey, itemID)
+	GetPins()[PinKey(mapID, slotKey)] = itemID -- itemID, or nil to clear
+	Render()
+end
+
+-- The Loot Filter lens persists per character (a viewing state, like the Slot
+-- Filter), defaulting to "all".
+local function GetLootFilter()
+	local f = MythicLootCharDB and MythicLootCharDB.lootFilter
+	return LOOT_FILTER_MINTIER[f] and f or (f == "favorited" and f) or "all"
+end
+
+local function SetLootFilter(key)
+	MythicLootCharDB.lootFilter = key
+	Render()
 end
 
 local function GetStatPriority()
@@ -135,10 +226,10 @@ local function StatLabel(statKey)
 end
 
 -- The scoring engine wants a dense, ordered array; the stored selection may have
--- gaps (a "—" in the middle), so compact it preserving rank order.
+-- gaps (a "—" in the 1st), so compact it preserving rank order.
 local function CompactStatPriority(sel)
 	local p = {}
-	for i = 1, 3 do
+	for i = 1, 2 do
 		if sel[i] then table.insert(p, sel[i]) end
 	end
 	return p
@@ -149,7 +240,7 @@ end
 local function SetStatRank(i, statKey)
 	local sel = GetStatPriority()
 	if statKey then
-		for j = 1, 3 do
+		for j = 1, 2 do
 			if j ~= i and sel[j] == statKey then sel[j] = nil end
 		end
 	end
@@ -160,9 +251,35 @@ end
 local function UpdateStatDropdowns()
 	if not statDropdowns[1] then return end
 	local sel = GetStatPriority()
-	for i = 1, 3 do
+	for i = 1, 2 do
 		statDropdowns[i]:SetText(sel[i] and StatLabel(sel[i]) or "—")
 	end
+end
+
+-- A Loot Filter option only makes sense with the data it reads: the tier modes
+-- need a Stat Priority to rank against; Favorited needs at least one Favorite.
+-- Unmet options are greyed in the menu; a selected-then-invalidated option (e.g.
+-- after switching to a spec with no priorities) falls back to "all" so the grid
+-- never blanks for no visible reason.
+local function StatActiveNow()
+	return #CompactStatPriority(GetStatPriority()) > 0
+end
+
+local function HasFavorites()
+	return next(GetFavorites()) ~= nil
+end
+
+local function LootFilterReason(key)
+	if LOOT_FILTER_MINTIER[key] and not StatActiveNow() then
+		return "Set a stat priority first — these rank loot by your stats."
+	elseif key == "favorited" and not HasFavorites() then
+		return "Favorite an item first — left-click a cell to pick one."
+	end
+end
+
+local function EffectiveLootFilter()
+	local f = GetLootFilter()
+	return LootFilterReason(f) and "all" or f
 end
 
 -- Returns the checked Slots in canonical order, plus a key-set for matching.
@@ -334,13 +451,21 @@ local function CreateCell()
 	cell.Count = cell:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
 	cell.Count:SetPoint("BOTTOMRIGHT", 1, 0)
 
-	-- Gold star: this drop's secondary stats fit better than what you're wearing
-	-- (Stat Improvement). Sits in the top-left corner, clear of the icon center.
 	-- Stat Tier badge (profession material-quality medallion), atlas set per tier.
+	-- Sits in the top-left corner, clear of the icon center.
 	cell.Star = cell:CreateTexture(nil, "OVERLAY")
 	cell.Star:SetSize(16, 16)
 	cell.Star:SetPoint("TOPLEFT", -3, 3)
 	cell.Star:Hide()
+
+	-- Favorite heart: bottom-left corner, so it never collides with the top-left
+	-- star or the bottom-right "+N" count. Shown when the Shown Drop is Favorited.
+	cell.Heart = cell:CreateTexture(nil, "OVERLAY")
+	cell.Heart:SetSize(13, 13)
+	cell.Heart:SetPoint("BOTTOMLEFT", -2, -2)
+	cell.Heart:SetTexture(HEART_TEXTURE)
+	cell.Heart:SetVertexColor(1, 0.32, 0.42)
+	cell.Heart:Hide()
 
 	cell:SetScript("OnEnter", function(self)
 		if not (self.link or self.itemID) then return end
@@ -353,14 +478,31 @@ local function CreateCell()
 		if self.statTier and self.statTier > 0 then
 			GameTooltip:AddLine(STAR_TOOLTIP[self.statTier], 1, 0.82, 0, true)
 		end
+		if self.itemID then
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine(self.isFav and "Right-click to unfavorite."
+				or "Right-click to favorite.", 0.6, 0.6, 0.6)
+			if self.extraDrops and self.extraDrops > 0 then
+				GameTooltip:AddLine("Left-click for all " .. (self.extraDrops + 1)
+					.. " drops.", 0.6, 0.6, 0.6)
+			end
+		end
 		GameTooltip:Show()
 	end)
 	cell:SetScript("OnLeave", function()
 		GameTooltip:Hide()
 	end)
-	cell:SetScript("OnClick", function(self)
-		if self.link and IsModifiedClick("CHATLINK") then
+	cell:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	cell:SetScript("OnClick", function(self, button)
+		-- Right-click is the quick Favorite toggle on the Shown Drop; left-click
+		-- (unmodified) opens the Drop Picker. Shift-left still links to chat.
+		-- These bindings are intentionally easy to retune in-game.
+		if button == "RightButton" then
+			if self.itemID then ToggleFavorite(self.itemID) end
+		elseif self.link and IsModifiedClick("CHATLINK") then
 			ChatEdit_InsertLink(self.link)
+		elseif self.OpenPicker then
+			self:OpenPicker()
 		end
 	end)
 
@@ -382,6 +524,7 @@ local function SetCellItem(cell, item, extra)
 	cell.Icon:SetTexture(item.icon or 134400) -- question-mark icon while uncached
 	cell.Icon:Show()
 	cell.Count:SetText(extra > 0 and ("+" .. extra) or "")
+	cell.extraDrops = extra
 	cell.statTier = 0
 	cell.Star:Hide()
 end
@@ -392,8 +535,17 @@ local function SetCellEmpty(cell)
 	cell.Icon:Hide()
 	cell.Empty:Show()
 	cell.Count:SetText("")
+	cell.extraDrops = 0
+	cell.isFav = false
 	cell.statTier = 0
 	cell.Star:Hide()
+	cell.Heart:Hide()
+end
+
+-- Show or hide this cell's Favorite heart (the Shown Drop is Favorited).
+local function SetCellHeart(cell, isFav)
+	cell.isFav = isFav and true or false
+	cell.Heart:SetShown(cell.isFav)
 end
 
 -- Show this cell's Stat Tier badge (1 bronze / 2 silver / 3 gold), or hide it.
@@ -623,7 +775,124 @@ end
 
 -- ===== Rendering =====
 
-local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, columns, numCols, statPriority, statActive)
+-- Choose a Cell's Shown Drop and whether it passes the active Loot Filter, per
+-- the precedence in CONTEXT.md: a tier/Favorited filter auto-surfaces the Drop
+-- it is about (dimming the Cell if none qualifies); the All view honors a Pin,
+-- else the best-tier Favorite, else the best Stat Tier Drop. The Cell's star and
+-- heart always describe whichever Drop this returns.
+local function ResolveCell(items, slot, mapID, statPriority, statActive, filter)
+	local canTier = statActive and slot.key ~= "Other"
+	local function tierOf(it)
+		return canTier and MythicLoot.ItemStatTier(it.link, statPriority) or 0
+	end
+
+	local bestDrop, bestTier = items[1], 0
+	if canTier then
+		for _, it in ipairs(items) do
+			local t = tierOf(it)
+			if t > bestTier then bestDrop, bestTier = it, t end
+		end
+	end
+
+	-- Highest-tier Favorited Drop in this Cell, if any.
+	local favDrop, favTier = nil, -1
+	for _, it in ipairs(items) do
+		if IsFavorite(it.itemID) then
+			local t = tierOf(it)
+			if t > favTier then favDrop, favTier = it, t end
+		end
+	end
+
+	-- The pinned Drop, if the player pinned one that still drops here.
+	local pinID, pinDrop = GetPin(mapID, slot.key), nil
+	if pinID then
+		for _, it in ipairs(items) do
+			if it.itemID == pinID then pinDrop = it break end
+		end
+	end
+
+	local shown, tier, passes
+	if filter == "favorited" then
+		passes = favDrop ~= nil
+		-- Whether the Cell passes depends on any Favorite existing, but a pinned
+		-- Favorite still wins which one shows — so re-pinning updates live.
+		if pinDrop and IsFavorite(pinDrop.itemID) then
+			shown, tier = pinDrop, tierOf(pinDrop)
+		else
+			shown = favDrop or items[1]
+			tier = favDrop and favTier or 0
+		end
+	elseif LOOT_FILTER_MINTIER[filter] then
+		local minTier = LOOT_FILTER_MINTIER[filter]
+		passes = bestTier >= minTier
+		-- Pass/dim follows whether ANY drop qualifies (keeps coverage honest), but
+		-- a pinned drop that also qualifies wins which one shows.
+		if pinDrop and tierOf(pinDrop) >= minTier then
+			shown, tier = pinDrop, tierOf(pinDrop)
+		else
+			shown, tier = bestDrop, bestTier
+		end
+	else -- "all": Pin -> Favorite -> best Stat Tier
+		if pinDrop then
+			shown, tier = pinDrop, tierOf(pinDrop)
+		elseif favDrop then
+			shown, tier = favDrop, favTier
+		else
+			shown, tier = bestDrop, bestTier
+		end
+		passes = true
+	end
+
+	return {
+		shown = shown,
+		tier = tier,
+		extra = #items - 1,
+		isFav = IsFavorite(shown.itemID),
+		passes = passes,
+	}
+end
+
+-- Menu label for a Drop: item icon, its colored name (from the link), and the
+-- Stat Tier medallion when it has one.
+local function DropLabel(it, tier)
+	local icon = "|T" .. (it.icon or 134400) .. ":16:16:0:0|t "
+	local name = it.link or it.name or ("item:" .. tostring(it.itemID))
+	local medal = (tier and tier > 0)
+		and (" |A:Professions-Icon-Quality-Tier" .. tier .. ":14:14|a") or ""
+	return icon .. name .. medal
+end
+
+-- The Drop Picker (left-click a Cell): lists every Drop so the player can Pin
+-- which one shows in the All view and Favorite any of them. Click bindings are
+-- intentionally easy to retune in-game.
+local function OpenDropPicker(cell)
+	local items, mapID, slotKey = cell.drops, cell.mapID, cell.slotKey
+	if not (items and #items > 0 and mapID and slotKey) then return end
+	local slot = MythicLoot.GetSlotByKey(slotKey)
+	local statPriority = CompactStatPriority(GetStatPriority())
+	local canTier = (#statPriority > 0) and slotKey ~= "Other"
+	local function tierOf(it)
+		return canTier and MythicLoot.ItemStatTier(it.link, statPriority) or 0
+	end
+
+	MenuUtil.CreateContextMenu(cell, function(_, root)
+		root:CreateTitle(slot and slot.label or "Drops")
+
+		-- What shows in the All view: Auto, or a specific pinned Drop.
+		root:CreateRadio("Auto (favorite, else best)",
+			function() return GetPin(mapID, slotKey) == nil end,
+			function() SetPin(mapID, slotKey, nil) end)
+		for _, it in ipairs(items) do
+			local d = it
+			local r = root:CreateRadio(DropLabel(d, tierOf(d)),
+				function() return GetPin(mapID, slotKey) == d.itemID end,
+				function() SetPin(mapID, slotKey, d.itemID) end)
+			r:SetTooltip(function(tooltip) tooltip:SetHyperlink(d.link) end)
+		end
+	end)
+end
+
+local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, columns, numCols, statPriority, statActive, lootFilter)
 	row.Icon:SetTexture(dungeon.icon)
 	row.Name:SetText(dungeon.name)
 	row.Bg:SetColorTexture(1, 1, 1, 0.04)
@@ -640,12 +909,38 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 		return
 	end
 
-	-- Coverage badge is meaningful only while filtering.
+	local mapID = dungeon.challengeMapID
+
+	-- Group this dungeon's items by slot so each column shows its slot's drops,
+	-- then resolve each slot's Shown Drop + filter-pass once (used by both the
+	-- coverage badge and the cell render below).
+	local bySlot = {}
+	for _, item in ipairs(loot.items) do
+		local list = bySlot[item.slotKey]
+		if not list then
+			list = {}
+			bySlot[item.slotKey] = list
+		end
+		table.insert(list, item)
+	end
+
+	local resolved = {}
+	for key, items in pairs(bySlot) do
+		local slot = MythicLoot.GetSlotByKey(key)
+		if slot then
+			resolved[key] = ResolveCell(items, slot, mapID, statPriority, statActive, lootFilter)
+		end
+	end
+
+	-- Coverage badge is meaningful only while the Slot Filter is active. The
+	-- numerator counts checked Slots whose Drop survives the Loot Filter, so
+	-- tightening the lens lowers the count (CONTEXT.md: Slot Coverage).
 	local filtered = #checkedList > 0
 	if filtered then
 		local covered = 0
 		for _, slot in ipairs(checkedList) do
-			if loot.slotSet[slot.key] then
+			local r = resolved[slot.key]
+			if r and r.passes then
 				covered = covered + 1
 			end
 		end
@@ -661,46 +956,28 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 		end
 	end
 
-	-- Group this dungeon's items by slot so each column shows its slot's drops.
-	local bySlot = {}
-	for _, item in ipairs(loot.items) do
-		local list = bySlot[item.slotKey]
-		if not list then
-			list = {}
-			bySlot[item.slotKey] = list
-		end
-		table.insert(list, item)
-	end
-
-	-- Always render the full column set in the same positions; when filtering,
-	-- the non-selected columns dim so nothing shifts as the filter changes.
+	-- Always render the full column set in the same positions; filtering only
+	-- dims, so nothing shifts. A cell is lit only when it passes BOTH the Slot
+	-- Filter and the Loot Filter.
 	for i = 1, numCols do
 		local slot = columns[i]
 		local cell = AcquireCell(row)
 		cell:SetPoint("LEFT", row, "LEFT", GRID_START_X + (i - 1) * CELL, 0)
-		local items = bySlot[slot.key]
-		if items then
-			-- With the Stat Priority lens on, surface this slot's best-tier drop
-			-- and star it by tier (the item's own secondaries vs your priority).
-			local shown, extra = items[1], #items - 1
-			local tier = 0
-			-- "Other" is the non-gear catch-all (mounts, recipes, …) — never a Slot
-			-- to min-max, so it gets no Stat Badge even if an item carries secondaries.
-			if statActive and slot.key ~= "Other" then
-				local best, bestTier = items[1], 0
-				for _, it in ipairs(items) do
-					local t = MythicLoot.ItemStatTier(it.link, statPriority)
-					if t > bestTier then best, bestTier = it, t end
-				end
-				shown, tier = best, bestTier
-			end
-			SetCellItem(cell, shown, extra)
-			SetCellStar(cell, tier)
+		cell.mapID = mapID
+		cell.slotKey = slot.key
+		cell.drops = bySlot[slot.key]
+		cell.OpenPicker = OpenDropPicker
+		local r = resolved[slot.key]
+		if r then
+			SetCellItem(cell, r.shown, r.extra)
+			SetCellStar(cell, r.tier)
+			SetCellHeart(cell, r.isFav)
 		else
 			SetCellEmpty(cell)
 		end
-		local active = (not filtered) or checkedSet[slot.key]
-		cell:SetAlpha(active and 1 or 0.25)
+		local slotLit = (not filtered) or checkedSet[slot.key]
+		local filterLit = (lootFilter == "all") or (r and r.passes)
+		cell:SetAlpha((slotLit and filterLit) and 1 or 0.25)
 	end
 end
 
@@ -716,6 +993,15 @@ function Render()
 	-- (bronze/silver/gold by the item's own secondaries vs the priority).
 	local statPriority = CompactStatPriority(GetStatPriority())
 	local statActive = #statPriority > 0
+	-- Use the EFFECTIVE filter: a selected option whose data is gone (e.g. after a
+	-- spec change) reads as "all" so the grid never blanks. Keep the dropdown label
+	-- matching what's actually in effect.
+	local lootFilter = EffectiveLootFilter()
+	if filterDropdown then
+		for _, f in ipairs(LOOT_FILTERS) do
+			if f.key == lootFilter then filterDropdown:SetText(f.label) end
+		end
+	end
 
 	-- The grid always shows every slot column in the same position, so items
 	-- never jump when the filter changes. Filtering only dims the non-selected
@@ -743,7 +1029,7 @@ function Render()
 	for _, d in ipairs(data) do
 		local row = AcquireRow()
 		row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -y)
-		LayoutDungeonRow(row, d.info, d.loot, checkedList, checkedSet, columns, numCols, statPriority, statActive)
+		LayoutDungeonRow(row, d.info, d.loot, checkedList, checkedSet, columns, numCols, statPriority, statActive, lootFilter)
 		if not d.loot then
 			anyLoading = true
 		end
@@ -816,6 +1102,7 @@ local function CreateToolbar()
 	slotDropdown:SetupMenu(function(_, rootDescription)
 		rootDescription:CreateButton("All Slots", function()
 			wipe(MythicLootCharDB.slotFilter)
+			ClearActiveFloor()
 			Render()
 		end)
 		for _, slot in ipairs(MythicLoot.Slots) do
@@ -827,6 +1114,7 @@ local function CreateToolbar()
 					else
 						MythicLootCharDB.slotFilter[slot.key] = true
 					end
+					ClearActiveFloor()
 					Render()
 				end)
 		end
@@ -852,8 +1140,8 @@ local function CreateToolbar()
 	-- Picking a track sets the goal and immediately seeds the Slot Filter from any
 	-- slot whose own gear hasn't reached it — no separate trigger button needed.
 	local goalLabel = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	goalLabel:SetPoint("TOPLEFT", TOOLBAR_LEFT, -74)
-	goalLabel:SetText("Find Upgrades to reach")
+	goalLabel:SetPoint("TOPLEFT", ROW2_LEFT, -74)
+	goalLabel:SetText("Help me reach")
 	table.insert(row2Widgets, goalLabel)
 
 	floorDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
@@ -865,35 +1153,40 @@ local function CreateToolbar()
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
 		GameTooltip:SetText("Find Upgrades")
 		GameTooltip:AddLine("Pick the track you want every slot to reach. Slots whose "
-			.. "own gear is still below it get checked in the Slot Filter.",
+			.. "own gear is still below it get checked in the Slot Filter. Pick \"—\" "
+			.. "or edit the slots by hand to step out of this mode.",
 			0.8, 0.8, 0.8, true)
 		GameTooltip:Show()
 	end)
 	floorDropdown:HookScript("OnLeave", GameTooltip_Hide)
 	floorDropdown:SetupMenu(function(_, rootDescription)
+		rootDescription:CreateRadio("—",
+			function() return activeFloor == nil end,
+			function() ClearActiveFloor() end)
 		for _, track in ipairs(MythicLoot.TRACK_ORDER) do
 			rootDescription:CreateRadio(track,
-				function() return GetTrackFloor() == track end,
+				function() return activeFloor == track end,
 				function()
 					SetTrackFloor(track)
-					floorDropdown:SetText(track)
+					activeFloor = track
 					SeedNeededSlots()
+					UpdateFloorDropdown()
 				end)
 		end
 	end)
-	floorDropdown:SetText(GetTrackFloor())
+	UpdateFloorDropdown()
 
 	-- Stat Priority (min-max lens) shares row 2, to the right of the Find Upgrades
-	-- controls. Three ranked dropdowns; a stat picked in one rank drops out of the
-	-- others. Tier badges in the grid then grade drops by these stats.
+	-- controls. Two ranked dropdowns (ADR 0006); a stat picked in one rank drops
+	-- out of the other. Tier badges in the grid then grade drops by these stats.
 	local statsLabel = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	statsLabel:SetPoint("LEFT", floorDropdown, "RIGHT", 24, 0)
+	statsLabel:SetPoint("LEFT", floorDropdown, "RIGHT", 16, 0)
 	statsLabel:SetText("Stats:")
 	table.insert(row2Widgets, statsLabel)
 
-	local ordinals = { "1st", "2nd", "3rd" }
+	local ordinals = { "1st", "2nd" }
 	local anchor = statsLabel
-	for i = 1, 3 do
+	for i = 1, 2 do
 		local ord = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 		ord:SetText(ordinals[i])
 		ord:SetPoint("LEFT", anchor, "RIGHT", (i == 1) and 8 or 7, 0)
@@ -916,6 +1209,65 @@ local function CreateToolbar()
 		anchor = dd
 	end
 	UpdateStatDropdowns()
+
+	-- Loot Filter: the lens that dims Cells whose Shown Drop fails the criterion
+	-- (and feeds the Slot Coverage count). Took the 3rd Stat dropdown's spot.
+	local showLabel = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	showLabel:SetPoint("LEFT", anchor, "RIGHT", 18, 0)
+	showLabel:SetText("Show:")
+	table.insert(row2Widgets, showLabel)
+
+	filterDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
+	filterDropdown:SetSize(110, 24)
+	filterDropdown:SetPoint("LEFT", showLabel, "RIGHT", 4, 0)
+	filterDropdown.disableSelectionText = true
+	filterDropdown:SetupMenu(function(_, rootDescription)
+		for _, f in ipairs(LOOT_FILTERS) do
+			local key = f.key
+			-- The generator re-runs each time the menu opens, so a snapshot reason
+			-- here reflects current state. Grey out options whose data isn't there
+			-- yet, and explain why on hover.
+			local reason = LootFilterReason(key)
+			local radio = rootDescription:CreateRadio(f.label,
+				function() return EffectiveLootFilter() == key end,
+				function()
+					SetLootFilter(key)
+					filterDropdown:SetText(f.label)
+				end)
+			radio:SetEnabled(reason == nil)
+			if reason then
+				radio:SetTooltip(function(tooltip)
+					GameTooltip_SetTitle(tooltip, f.label)
+					GameTooltip_AddNormalLine(tooltip, reason)
+				end)
+			end
+		end
+	end)
+	table.insert(row2Widgets, filterDropdown)
+
+	-- Reset: back to a clean slate — your playing spec, all slots shown, no track
+	-- and no Loot Filter. Deliberately leaves Favorites (and per-cell Pins) alone.
+	local resetButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	resetButton:SetSize(64, 24)
+	resetButton:SetPoint("LEFT", filterDropdown, "RIGHT", 10, 0)
+	resetButton:SetText("Reset")
+	resetButton:SetScript("OnClick", function()
+		wipe(MythicLootCharDB.slotFilter)
+		MythicLootCharDB.lootFilter = "all"
+		activeFloor = nil
+		UpdateFloorDropdown()
+		if filterDropdown then filterDropdown:SetText(LOOT_FILTERS[1].label) end
+		SetSpecSelection(MythicLoot.GetPlayingSpec()) -- re-renders
+	end)
+	resetButton:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+		GameTooltip:SetText("Reset")
+		GameTooltip:AddLine("Back to your current spec with all slots shown and no "
+			.. "filters. Your favorites are kept.", 0.8, 0.8, 0.8, true)
+		GameTooltip:Show()
+	end)
+	resetButton:SetScript("OnLeave", GameTooltip_Hide)
+	table.insert(row2Widgets, resetButton)
 
 	-- Advanced toggle, top-right (clear of the left-side dropdowns/buttons): shows
 	-- or hides row 2 (Find Upgrades + Stat Priority). Lives on row 1 so it stays
