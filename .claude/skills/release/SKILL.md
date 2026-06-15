@@ -58,16 +58,22 @@ Read `## Version: X.Y.Z` from the `.toc`. Check `git tag -l vX.Y.Z`:
 3. **Confirm before publishing.** Show the user `vX.Y.Z`, the notes, and that a tag
    + public GitHub release will be created; wait for a clear go-ahead. Tags and
    releases are hard to undo, so this checkpoint is required.
-4. **Stamp the changelog** (only if still `## Unreleased`): rename to
-   `## vX.Y.Z — YYYY-MM-DD`, commit just that file `Release vX.Y.Z` (Co-Authored-By
-   trailer), and `git push`. This is the only commit the release makes.
+4. **Stamp the changelog via a PR** (only if still `## Unreleased`). `main` is
+   branch-protected (PR-only, CI-required), so it can't be pushed directly. From a
+   branch off `main`, rename the heading to `## vX.Y.Z — YYYY-MM-DD`, commit just
+   that file (`Release vX.Y.Z`, Co-Authored-By trailer), push, `gh pr create --base
+   main`, then `gh pr merge --squash --auto --delete-branch`. Wait for CI + merge
+   (`gh pr view <n> --json state` until `MERGED` — CI is the quick Lua syntax job),
+   then `git checkout main && git pull --ff-only`. If already stamped, skip this.
 5. **Build the zip:** run `.claude/skills/release/package.sh`; confirm the listing
    is only `MythicLoot/` (the `.lua` + `.toc`), no `.DS_Store`, no docs.
 6. **Syntax-check** like CI: `find MythicLoot -name '*.lua' -print0 | xargs -0 -n1 luac -p`
    (use `luac5.1` if present). Stop on any error.
-7. **Tag and push:** `git tag vX.Y.Z && git push origin vX.Y.Z` (tags `main`'s HEAD).
-8. **Publish:** `gh release create vX.Y.Z MythicLoot.zip --title "vX.Y.Z" --notes "<body>"`.
-9. **Report** the version, the release URL, and that the zip (git-ignored) is now
+7. **Tag + publish in one step:** `gh release create vX.Y.Z MythicLoot.zip --target
+   main --title "vX.Y.Z" --notes "<body>"`. This creates the tag at `main`'s HEAD via
+   the API (so branch protection doesn't block it) and publishes with the zip
+   attached — no separate `git push` of the tag.
+8. **Report** the version, the release URL, and that the zip (git-ignored) is now
    attached to the release.
 
 ## Notes
