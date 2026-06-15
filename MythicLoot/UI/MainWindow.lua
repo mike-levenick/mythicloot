@@ -14,6 +14,7 @@ local WINDOW_WIDTH = 760
 local DEFAULT_WINDOW_HEIGHT = 550
 local MIN_WINDOW_HEIGHT = 300
 local ROW2_SPAN = 40 -- vertical space row 2 occupies; reclaimed when collapsed
+local BANNER_SPAN = 18 -- extra height reserved for the wrong-spec banner, only when shown
 -- Overall UI scale, locked for now (was a user stepper; may return later).
 local UI_SCALE = 1.25
 -- SCROLL_BOTTOM keeps a strip clear at the bottom for the footer bar.
@@ -53,11 +54,12 @@ local STAR_TOOLTIP = {
 
 local window, specDropdown, slotDropdown, floorDropdown, banner, status
 local windowHeight = DEFAULT_WINDOW_HEIGHT -- mutable; refit to the row count once loaded
+local bannerShown = false -- whether the wrong-spec banner is currently reserving a line
 local statDropdowns = {} -- the three Stat Priority rank dropdowns (1st/2nd/3rd)
 local row2Widgets = {}   -- every widget on the collapsible second row
 local collapseButton     -- row-1 toggle that shows/hides row 2
 local scrollFrame, scrollChild, headerFrame
-local Render, ApplyToolsCollapse -- forward declarations
+local Render, ApplyToolsCollapse, ApplyLayout -- forward declarations
 
 -- ===== Per-character state =====
 
@@ -229,11 +231,17 @@ end
 local function UpdateBanner()
 	local classID, specID = GetSpecSelection()
 	local playingClass, playingSpec = MythicLoot.GetPlayingSpec()
-	if classID == playingClass and specID == playingSpec then
-		banner:SetText("")
-	else
+	local wrong = not (classID == playingClass and specID == playingSpec)
+	if wrong then
 		banner:SetText(COLOR_WARN .. "Viewing:|r " .. SpecText(classID, specID)
 			.. COLOR_WARN .. " — not your current spec|r")
+	else
+		banner:SetText("")
+	end
+	-- Reserve/release the banner's line when its visibility changes.
+	if wrong ~= bannerShown then
+		bannerShown = wrong
+		if ApplyLayout then ApplyLayout() end
 	end
 end
 
@@ -752,7 +760,7 @@ function Render()
 	local desired = math.max(y + 6 + (-SCROLL_TOP + SCROLL_BOTTOM), MIN_WINDOW_HEIGHT)
 	if math.abs(desired - windowHeight) >= 1 then
 		windowHeight = desired
-		ApplyToolsCollapse(MythicLootGlobalDB.toolsCollapsed)
+		ApplyLayout()
 	end
 
 	if teleportsNeedSetup then
@@ -942,24 +950,33 @@ function ApplyToolsCollapse(collapsed)
 	for _, w in ipairs(row2Widgets) do
 		w:SetShown(not collapsed)
 	end
-
-	local shift = collapsed and ROW2_SPAN or 0
-	headerFrame:ClearAllPoints()
-	headerFrame:SetPoint("TOPLEFT", 10, HEADER_Y + shift)
-	scrollFrame:ClearAllPoints()
-	scrollFrame:SetPoint("TOPLEFT", 10, SCROLL_TOP + shift)
-	scrollFrame:SetPoint("BOTTOMRIGHT", -32, SCROLL_BOTTOM)
-	window:SetHeight(windowHeight - shift)
-
-	-- Recessed inset tracks the header so it keeps framing the list in both states.
-	if window.Inset then
-		window.Inset:ClearAllPoints()
-		window.Inset:SetPoint("TOPLEFT", window, "TOPLEFT", 8, -100 + shift)
-		window.Inset:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 30)
-	end
-
 	-- Label reflects what a click will do.
 	collapseButton:SetText(collapsed and "Show Advanced" or "Hide Advanced")
+	ApplyLayout()
+end
+
+-- Position the header, list, window, and inset for the current collapse + banner
+-- state. Collapsing row 2 pulls everything UP by ROW2_SPAN (and shrinks the
+-- window); showing the wrong-spec banner pushes the header/list DOWN by
+-- BANNER_SPAN (and grows the window) so the banner gets its own line instead of
+-- crowding the header. The visible list height is unchanged either way.
+function ApplyLayout()
+	local shift = (MythicLootGlobalDB.toolsCollapsed and ROW2_SPAN or 0)
+	local banner_ = bannerShown and BANNER_SPAN or 0
+	local off = shift - banner_
+	headerFrame:ClearAllPoints()
+	headerFrame:SetPoint("TOPLEFT", 10, HEADER_Y + off)
+	scrollFrame:ClearAllPoints()
+	scrollFrame:SetPoint("TOPLEFT", 10, SCROLL_TOP + off)
+	scrollFrame:SetPoint("BOTTOMRIGHT", -32, SCROLL_BOTTOM)
+	window:SetHeight(windowHeight - off)
+
+	-- Recessed inset tracks the header so it keeps framing the list in all states.
+	if window.Inset then
+		window.Inset:ClearAllPoints()
+		window.Inset:SetPoint("TOPLEFT", window, "TOPLEFT", 8, -100 + off)
+		window.Inset:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 30)
+	end
 end
 
 local function CreateWindow()
@@ -987,10 +1004,10 @@ local function CreateWindow()
 		window.TitleText:SetText("MythicLoot")
 	end
 
-	-- Portrait: a treasure chest, top-left. To use custom art instead, ship a
-	-- .tga/.blp under MythicLoot/Media and point this at "Interface\\AddOns\\
-	-- MythicLoot\\Media\\<file>" (no extension).
-	local portraitIcon = "Interface\\Icons\\inv_misc_treasurechest03"
+	-- Portrait: the Mythic Keystone icon (inv_relics_hourglass), top-left — a crisp
+	-- 64px icon. To use custom art instead, ship a .tga/.blp under MythicLoot/Media
+	-- and point this at "Interface\\AddOns\\MythicLoot\\Media\\<file>" (no extension).
+	local portraitIcon = "Interface\\Icons\\inv_relics_hourglass"
 	if window.SetPortraitToAsset then
 		window:SetPortraitToAsset(portraitIcon)
 	elseif window.PortraitContainer and window.PortraitContainer.portrait then
@@ -1019,8 +1036,9 @@ local function CreateWindow()
 	divider:SetHeight(1)
 	divider:SetColorTexture(1, 1, 1, 0.15)
 
-	-- Banner rides just above the header (and moves with it on collapse).
-	banner:SetPoint("BOTTOMLEFT", headerFrame, "TOPLEFT", 4, 2)
+	-- Banner is vertically centered in the space above the header (it moves with
+	-- the header on collapse / banner-reserve).
+	banner:SetPoint("LEFT", headerFrame, "TOPLEFT", 4, 18)
 
 	scrollFrame = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
 	scrollFrame:SetPoint("TOPLEFT", 10, SCROLL_TOP)
