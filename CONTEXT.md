@@ -54,7 +54,7 @@ A single-choice lens over the grid, replacing the old 3rd Stat Priority dropdown
 
 A Claimed Drop (at the Voidcore Track) always wears a mark in its Cell's top-right corner, in every mode — so claim progress is visible while browsing, not only inside the Voidforge lens.
 
-An option is only offered when the data it reads exists: the tier modes need a Stat Priority set, Favorited needs at least one Favorite, and Voidforge needs the Spec Selection to be the player's own spec (Claims are their Loot Spec history — they can't be shown for a spec the player has never rolled as). Unmet options are greyed out with a tooltip saying what to do; a selected option whose data later disappears (e.g. switching to a spec with no Stat Priority, or pointing the Spec Selection at another spec) falls back to **All** so the grid never blanks.
+An option is only offered when the data it reads exists: the tier modes need a Stat Priority set, Favorited needs at least one Favorite, and Voidforge needs the Spec Selection to match the player's **Loot Spec** (Claims are their Loot Spec history — a Voidcore rolls against the Loot Spec's table, so the lens is only truthful when the grid is showing that same spec). Unmet options are greyed out with a tooltip saying what to do; a selected option whose data later disappears (e.g. switching to a spec with no Stat Priority, or pointing the Spec Selection at another spec) falls back to **All** so the grid never blanks.
 
 ### Dungeon List
 The fixed, stable list of all Season Rotation dungeons. Every dungeon is always visible in the same order; filtering only changes highlight/dim state and Slot Coverage display, never membership or position.

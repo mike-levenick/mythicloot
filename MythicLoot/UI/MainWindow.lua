@@ -259,12 +259,14 @@ local function VoidforgeLabel(track)
 	return "Voidforge · " .. track
 end
 
--- Voidforge is a per-Loot-Spec history, so it's only meaningful while viewing the
--- player's own spec; the lens (and the claim gestures) are unavailable otherwise.
+-- Voidforge is a per-Loot-Spec history (a Voidcore rolls against the player's
+-- Loot Spec table, not their Playing Spec), so the lens and the claim gestures
+-- are only meaningful while the Spec Selection matches the real Loot Spec — that's
+-- when the grid's loot table and the claims describe the same pool. (ADR 0008.)
 local function VoidforgeAvailable()
 	local classID, specID = GetSpecSelection()
-	local pClass, pSpec = MythicLoot.GetPlayingSpec()
-	return classID == pClass and specID == pSpec
+	local lClass, lSpec = MythicLoot.GetLootSpec()
+	return classID == lClass and specID == lSpec
 end
 
 local function GetStatPriority()
@@ -335,7 +337,7 @@ local function LootFilterReason(key)
 	elseif key == "favorited" and not HasFavorites() then
 		return "Favorite an item first — left-click a cell to pick one."
 	elseif key == "voidforge" and not VoidforgeAvailable() then
-		return "Switch to your own spec to see what your Voidcores can still win."
+		return "Switch to your loot spec (the Loot Spec button) to see what your Voidcores can still win."
 	end
 end
 
