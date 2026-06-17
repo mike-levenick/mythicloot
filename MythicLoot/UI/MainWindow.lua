@@ -254,6 +254,11 @@ local function GetVoidcoreTrack()
 	return (MythicLootCharDB and MythicLootCharDB.voidcoreTrack) or DEFAULT_VOIDCORE_TRACK
 end
 
+-- The filter dropdown's label while the Voidforge lens is on, carrying the track.
+local function VoidforgeLabel(track)
+	return "Voidforge · " .. track
+end
+
 -- Voidforge is a per-Loot-Spec history, so it's only meaningful while viewing the
 -- player's own spec; the lens (and the claim gestures) are unavailable otherwise.
 local function VoidforgeAvailable()
@@ -1143,7 +1148,7 @@ function Render()
 	local lootFilter = EffectiveLootFilter()
 	if filterDropdown then
 		if lootFilter == "voidforge" then
-			filterDropdown:SetText("Voidforge · " .. GetVoidcoreTrack())
+			filterDropdown:SetText(VoidforgeLabel(GetVoidcoreTrack()))
 		else
 			for _, f in ipairs(LOOT_FILTERS) do
 				if f.key == lootFilter then filterDropdown:SetText(f.label) end
@@ -1389,7 +1394,7 @@ local function CreateToolbar()
 						function()
 							MythicLootCharDB.voidcoreTrack = track
 							SetLootFilter("voidforge")
-							filterDropdown:SetText("Voidforge · " .. track)
+							filterDropdown:SetText(VoidforgeLabel(track))
 						end)
 				end
 			else
