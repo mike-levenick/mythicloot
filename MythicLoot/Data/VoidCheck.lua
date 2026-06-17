@@ -7,8 +7,10 @@ local ADDON_NAME, MythicLoot = ...
 --   /ml voidcheck arm        one-shot: dump the NEXT tooltip you hover (use on the roll popup —
 --                            its "what's left / greyed out" list vanishes when you roll)
 --   /ml voidcheck bag        list bag items (itemID + link) to help you find the Voidcore/container
---   /ml voidcheck <itemID>   dump that item's tooltip lines via C_TooltipInfo — does it list the
---                            remaining roll loot? (the retroactive-scrape path, if it works)
+--   /ml voidcheck <itemID>   dump that item's tooltip lines via C_TooltipInfo.GetItemByID.
+--                            NOTE: verified generic — by-ID returns no Track and no remaining-pool
+--                            list (ADR 0008), so this is NOT a retroactive scrape; only the live
+--                            roll-popup tooltip ("arm") has the list. Kept for spot-checking items.
 
 local function p(...)
 	print("|cff8000ffMythicLoot voidcheck|r:", ...)
