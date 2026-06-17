@@ -1065,7 +1065,18 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 			total = total + 1
 			if IsClaimed(mapID, voidTrack, item.itemID) then claimed = claimed + 1 end
 		end
-		poolExhausted = (total > 0 and claimed == total)
+		if total > 0 and claimed == total then
+			-- The game reopens a Pool the instant its last item is won, so a fully
+			-- claimed pool is really a fresh one. Clear the now-void Claims from
+			-- saved state (not just the display) to match — otherwise the next
+			-- toggle drops claimed below total, resurrecting the stale claims and
+			-- making the pool look exhausted again (ADR 0008 reset rule).
+			local claims = GetClaims()
+			for _, item in ipairs(loot.items) do
+				claims[ClaimKey(mapID, voidTrack, item.itemID)] = nil
+			end
+			poolExhausted = true
+		end
 	end
 	local function claimedNow(itemID)
 		if not ownSpec or poolExhausted then return false end
