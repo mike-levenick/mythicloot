@@ -75,7 +75,7 @@ The set of dungeons eligible for Mythic+ in the current season. V1's Dungeon Lis
 The Midnight (patch 12.0.5) bonus-loot system MythicLoot helps the player plan around. After completing eligible content — for V1's scope, a Season Rotation Mythic+ dungeon — the player may spend a Voidcore for an extra roll against that dungeon's loot table, awarded at the Gear Track their key level would grant in the Great Vault. The game removes a won item from future rolls (see Claim).
 
 ### Voidcore
-The consumable currency (in-game "Nebulous Voidcore") the player accrues and spends on a Voidforge roll. MythicLoot plans around what the rolls *yield*, not the currency balance.
+The consumable currency (in-game "Nebulous Voidcore") the player accrues and spends on a Voidforge roll. MythicLoot plans around what the rolls *yield*, not the currency balance. **Not** to be confused with the **Ascendant Voidcore** / **Ascendant Voidshard** items, which sit under the same Voidforge umbrella but only *upgrade an item's level* — they are out of scope for this feature.
 
 ### Claim
 An item the player has already won from a Voidforge roll, which the game then removes from that dungeon's future Voidforge rolls. A Claim is keyed by **dungeon + item + Gear Track**: removal is per Track, so winning a Myth-track piece does not remove the same item at a lower Track — the item can be Claimed at one Track and still available at another. Claims are tracked per character. A Drop that is Claimed at the Track being viewed drops out of that dungeon's Voidforge Pool.
