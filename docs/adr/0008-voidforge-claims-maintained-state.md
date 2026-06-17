@@ -35,8 +35,15 @@ Maintain Claim state **per character**, built from three sources:
    Poll until the tooltip is stable, with give-up caps.
 2. **Live** — the roll-result event (the reused `BONUS_ROLL_RESULT`-family) to mark
    a win the instant it happens; *optional*, since the next popup snapshot reconciles.
-3. **Manual** — a per-Drop toggle for corrections and the only path for pre-install
-   history; manual always wins.
+3. **Manual** — a per-Drop toggle for the scopes no popup has covered yet (other
+   dungeons/Tracks, or before the player has rolled there).
+
+**Reconciliation is proof &gt; assertion.** A Claim means "currently removed from
+the Pool" (rollable state), not lifetime history — so the popup snapshot is ground
+truth and *replaces* (not merges) the Claim state for its scope: it clears manual
+"won" marks the game proves are still rollable, and adds Claims the player never
+marked. Manual marks only stand where no snapshot has spoken. When a snapshot clears
+a manual mark, surface a one-line notice so the correction isn't mysterious.
 
 Key Claims by **dungeon + Track** (both read off the Voidcache instance). Handle the
 **exhaustion reset**: the popup always reflects current truth, so a snapshot that
