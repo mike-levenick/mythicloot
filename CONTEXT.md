@@ -50,9 +50,11 @@ A player's mark on a particular Drop ("I want this piece"), keyed by item and pe
 A player's explicit choice of which Drop a Cell shows, persisted per spec per character. In the **All** view a Pin always wins. Under a Loot Filter, the Cell's lit/dim state and its Slot Coverage still follow whether *any* Drop qualifies (so the lens stays truthful), but if the pinned Drop *itself* qualifies it wins which Drop shows — so re-pinning updates the grid live rather than only after the filter is cleared.
 
 ### Loot Filter
-A single-choice lens over the grid, replacing the old 3rd Stat Priority dropdown: **All** (off, the default), **Bronze & up**, **Silver & up**, **Gold only**, or **Favorited**. It dims every Cell whose Shown Drop fails the chosen criterion (combining with the Slot Filter — a Cell must pass both to stay lit) and feeds the Slot Coverage numerator. It never reorders or removes dungeons. An active Loot Filter chooses each Cell's Shown Drop (best Stat Tier for the tier modes, the Favorite for Favorited) rather than the All-view Favorite preference — but a Pin whose Drop also qualifies the filter still wins which Drop shows (see Pin).
+A single-choice lens over the grid, replacing the old 3rd Stat Priority dropdown: **All** (off, the default), **Bronze & up**, **Silver & up**, **Gold only**, **Favorited**, or **Voidforge (what's left)**. It dims every Cell whose Shown Drop fails the chosen criterion (combining with the Slot Filter — a Cell must pass both to stay lit) and feeds the Slot Coverage numerator. It never reorders or removes dungeons. An active Loot Filter chooses each Cell's Shown Drop (best Stat Tier for the tier modes, the Favorite for Favorited, a not-yet-Claimed Drop for Voidforge) rather than the All-view Favorite preference — but a Pin whose Drop also qualifies the filter still wins which Drop shows (see Pin). In **Voidforge** mode a Cell passes when the dungeon still has an unclaimed Drop for that Slot at the Voidcore Track, so the lit cells and the coverage count read as "where a Voidcore can still win me something."
 
-An option is only offered when the data it reads exists: the tier modes need a Stat Priority set, and Favorited needs at least one Favorite. Unmet options are greyed out with a tooltip saying what to do; a selected option whose data later disappears (e.g. switching to a spec with no Stat Priority) falls back to **All** so the grid never blanks.
+A Claimed Drop (at the Voidcore Track) always wears a mark in its Cell's top-right corner, in every mode — so claim progress is visible while browsing, not only inside the Voidforge lens.
+
+An option is only offered when the data it reads exists: the tier modes need a Stat Priority set, Favorited needs at least one Favorite, and Voidforge needs the Spec Selection to be the player's own spec (Claims are their Loot Spec history — they can't be shown for a spec the player has never rolled as). Unmet options are greyed out with a tooltip saying what to do; a selected option whose data later disappears (e.g. switching to a spec with no Stat Priority, or pointing the Spec Selection at another spec) falls back to **All** so the grid never blanks.
 
 ### Dungeon List
 The fixed, stable list of all Season Rotation dungeons. Every dungeon is always visible in the same order; filtering only changes highlight/dim state and Slot Coverage display, never membership or position.
@@ -68,6 +70,21 @@ The class/spec whose loot the addon is currently showing and counting Slot Cover
 
 ### Season Rotation
 The set of dungeons eligible for Mythic+ in the current season. V1's Dungeon List is exactly the current Season Rotation — no raids, no off-season dungeons.
+
+### Voidforge
+The Midnight (patch 12.0.5) bonus-loot system MythicLoot helps the player plan around. After completing eligible content — for V1's scope, a Season Rotation Mythic+ dungeon — the player may spend a Voidcore for an extra roll against that dungeon's loot table, awarded at the Gear Track their key level would grant in the Great Vault. The game removes a won item from future rolls (see Claim).
+
+### Voidcore
+The consumable currency (in-game "Nebulous Voidcore") the player accrues and spends on a Voidforge roll. MythicLoot plans around what the rolls *yield*, not the currency balance.
+
+### Claim
+An item the player has already won from a Voidforge roll, which the game then removes from that dungeon's future Voidforge rolls. A Claim is keyed by **dungeon + item + Gear Track**: removal is per Track, so winning a Myth-track piece does not remove the same item at a lower Track — the item can be Claimed at one Track and still available at another. Claims are tracked per character. A Drop that is Claimed at the Track being viewed drops out of that dungeon's Voidforge Pool.
+
+### Voidforge Pool
+The set of a dungeon's Drops a Voidcore roll can still yield for the player at a given Gear Track, **filtered to the player's loot specialization** (only what can actually drop for them) and minus their Claims. The Pool shrinks as the player Claims items; when *every* item in a Pool has been Claimed the game **resets** it — the whole Pool reopens and all those Claims clear — so "what's left" must treat a fully-Claimed Pool as freshly full, never as permanently empty.
+
+### Voidcore Track
+The single Gear Track whose Voidforge pool the grid is currently showing, chosen by the player and persisted per character (default Myth). It is a *viewing* selection — which Claim pool to look at — and is deliberately separate from the Track Floor: the Track Floor is the track you want your gear to **reach** (a Find Upgrades goal), whereas the Voidcore Track is the track your key **rolls at**. Same Gear Track ladder, different meaning.
 
 ### Reference Addon
 Keystone Loot (by Wolkenschutz), the addon whose *behavior* MythicLoot replicates. Its code is All Rights Reserved — behavior is studied in-game, code is never copied.
