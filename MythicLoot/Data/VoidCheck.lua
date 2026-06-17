@@ -4,12 +4,38 @@ local ADDON_NAME, MythicLoot = ...
 -- live facts we need before building auto-detect; delete this file once Voidforge
 -- ships. Usage:
 --   /ml voidcheck            cache-stamp inputs + your loot spec, and start watching roll events
+--   /ml voidcheck arm        one-shot: dump the NEXT tooltip you hover (use on the roll popup —
+--                            its "what's left / greyed out" list vanishes when you roll)
 --   /ml voidcheck bag        list bag items (itemID + link) to help you find the Voidcore/container
 --   /ml voidcheck <itemID>   dump that item's tooltip lines via C_TooltipInfo — does it list the
---                            remaining roll loot? (the heart of the scrape technique)
+--                            remaining roll loot? (the retroactive-scrape path, if it works)
 
 local function p(...)
 	print("|cff8000ffMythicLoot voidcheck|r:", ...)
+end
+
+-- The "what's left / greyed out" list lives in the transient roll popup's mouseover
+-- tooltip, which disappears when you roll. So: arm a one-shot capture, then hover
+-- the popup — the next tooltip that shows is dumped automatically (no typing race).
+local armed = false
+local tipHooked = false
+local function ArmTooltipCapture()
+	if not tipHooked then
+		tipHooked = true
+		GameTooltip:HookScript("OnShow", function(self)
+			if not armed then return end
+			armed = false
+			p("captured tooltip —", self:NumLines(), "lines:")
+			for i = 1, self:NumLines() do
+				local fs = _G["GameTooltipTextLeft" .. i]
+				local t = fs and fs:GetText()
+				if t and t ~= "" then print(string.format("  %2d: %s", i, t)) end
+			end
+			p("greyed-out (already-claimed) lines usually come through dimmed — note which.")
+		end)
+	end
+	armed = true
+	p("ARMED — now mouse over the roll popup (or its reward). The next tooltip is dumped.")
 end
 
 -- Watch the (reused) bonus-roll events so we can see which one fires on a Voidforge
@@ -78,6 +104,10 @@ function MythicLoot.VoidCheck(arg)
 	end
 	if arg == "bag" then
 		DumpBags()
+		return
+	end
+	if arg == "arm" then
+		ArmTooltipCapture()
 		return
 	end
 	local tocVersion = select(4, GetBuildInfo())
