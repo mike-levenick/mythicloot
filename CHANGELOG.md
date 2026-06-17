@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Faster opens** — the dungeon loot table is now cached between sessions and painted instantly, then refreshed from the game in the background, so you no longer watch it load every time. (ADR 0007)
+
 ## v1.1.0 — 2026-06-15
 
 ### Added
