@@ -14,4 +14,5 @@ Data/Slots.lua
 Data/Journal.lua
 Data/Teleports.lua
 Data/Gear.lua
+Data/VoidCheck.lua
 UI/MainWindow.lua

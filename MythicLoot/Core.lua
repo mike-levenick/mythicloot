@@ -1,8 +1,10 @@
 local ADDON_NAME, MythicLoot = ...
 
 local function InitSavedVariables()
-	-- Account-wide: window position. Per-character: slot filter, spec selection (see CONTEXT.md).
+	-- Account-wide: window position, cached EJ loot tables (ADR 0007).
+	-- Per-character: slot filter, spec selection (see CONTEXT.md).
 	MythicLootGlobalDB = MythicLootGlobalDB or {}
+	MythicLootGlobalDB.lootCache = MythicLootGlobalDB.lootCache or {}
 	MythicLootCharDB = MythicLootCharDB or {}
 	MythicLootCharDB.slotFilter = MythicLootCharDB.slotFilter or {}
 end
@@ -37,13 +39,18 @@ end)
 SLASH_MYTHICLOOT1 = "/mythicloot"
 SLASH_MYTHICLOOT2 = "/ml"
 SlashCmdList.MYTHICLOOT = function(msg)
-	msg = (msg or ""):lower():gsub("%s+", "")
-	if msg == "tracks" and MythicLoot.PrintGearTracks then
+	-- First word is the command; the rest is its argument (voidcheck takes one).
+	local cmd, arg = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
+	if cmd == "tracks" and MythicLoot.PrintGearTracks then
 		MythicLoot.PrintGearTracks()
 		return
 	end
-	if msg == "stats" and MythicLoot.PrintGearStats then
+	if cmd == "stats" and MythicLoot.PrintGearStats then
 		MythicLoot.PrintGearStats()
+		return
+	end
+	if cmd == "voidcheck" and MythicLoot.VoidCheck then
+		MythicLoot.VoidCheck(arg)
 		return
 	end
 	MythicLoot:ToggleWindow()

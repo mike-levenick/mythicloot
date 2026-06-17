@@ -32,6 +32,24 @@ local function SpecKey(classID, specID)
 	return classID .. "-" .. (specID or 0)
 end
 
+-- Persistent loot cache (ADR 0007). The EJ is still read at runtime as ever, but
+-- the resulting table is stored account-wide so a reopen paints instantly instead
+-- of watching it load. Each spec's table is stamped with the content patch +
+-- current M+ season; a mismatch (or no global DB yet) just means a cold read. The
+-- EJ stays the source of truth — every open re-reads in the background and
+-- overwrites, so a stale stamp self-heals within the session.
+local function PersistentCache()
+	MythicLootGlobalDB = MythicLootGlobalDB or {}
+	MythicLootGlobalDB.lootCache = MythicLootGlobalDB.lootCache or {}
+	return MythicLootGlobalDB.lootCache
+end
+
+local function CacheStamp()
+	local tocVersion = select(4, GetBuildInfo())
+	local season = C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetCurrentSeason()
+	return tostring(tocVersion) .. ":" .. tostring(season or 0)
+end
+
 -- The Season Rotation spans expansions, so index dungeons from every EJ tier once.
 local function BuildInstanceIndex()
 	if instanceByName then return end
@@ -137,6 +155,8 @@ end
 local function FinishRequest()
 	request.entry.loading = nil
 	request.entry.complete = true
+	-- Persist the freshly reconciled table for instant paint next session.
+	PersistentCache()[request.key] = { stamp = CacheStamp(), byMap = request.entry.byMap }
 	request = nil
 	Journal:UnregisterEvent("EJ_LOOT_DATA_RECIEVED")
 	Notify()
@@ -225,7 +245,20 @@ function Journal:RequestLoot(classID, specID)
 		request = nil
 	end
 
-	entry = entry or { byMap = {} }
+	if not entry then
+		entry = { byMap = {} }
+		-- Seed from last session's cache so the grid paints immediately; the read
+		-- started below reconciles it. Only when the stamp still matches — otherwise
+		-- prune the stale entry and fall back to a cold read.
+		local saved = PersistentCache()[key]
+		if saved and saved.byMap and saved.stamp == CacheStamp() then
+			local seeded = {}
+			for mapID, loot in pairs(saved.byMap) do seeded[mapID] = loot end
+			entry.byMap = seeded
+		elseif saved then
+			PersistentCache()[key] = nil
+		end
+	end
 	entry.loading = true
 	cache[key] = entry
 	request = { key = key, entry = entry, classID = classID, specID = specID, index = 0, retries = 0 }

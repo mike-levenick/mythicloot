@@ -68,8 +68,16 @@ local LOOT_FILTERS = {
 	{ key = "silver",    label = "Silver & up" },
 	{ key = "gold",      label = "Gold only" },
 	{ key = "favorited", label = "Favorited" },
+	{ key = "voidforge", label = "Voidforge (what's left)" },
 }
 local LOOT_FILTER_MINTIER = { bronze = 1, silver = 2, gold = 3 }
+
+-- Claimed-mark texture: a green check in the cell's top-right corner, marking a
+-- Drop the player has already won from a Voidforge roll at the Voidcore Track
+-- (clear of the top-left star, bottom-left heart, bottom-right "+N").
+local CLAIMED_TEXTURE = "Interface\\RaidFrame\\ReadyCheck-Ready"
+-- Default Gear Track whose Voidforge pool we view (CONTEXT.md: Voidcore Track).
+local DEFAULT_VOIDCORE_TRACK = "Myth"
 
 local window, specDropdown, slotDropdown, floorDropdown, banner, status
 local windowHeight = DEFAULT_WINDOW_HEIGHT -- mutable; refit to the row count once loaded
@@ -197,14 +205,68 @@ end
 
 -- The Loot Filter lens persists per character (a viewing state, like the Slot
 -- Filter), defaulting to "all".
+local VALID_LOOT_FILTER = {}
+for _, f in ipairs(LOOT_FILTERS) do VALID_LOOT_FILTER[f.key] = true end
+
 local function GetLootFilter()
 	local f = MythicLootCharDB and MythicLootCharDB.lootFilter
-	return LOOT_FILTER_MINTIER[f] and f or (f == "favorited" and f) or "all"
+	return (f and VALID_LOOT_FILTER[f]) and f or "all"
 end
 
 local function SetLootFilter(key)
 	MythicLootCharDB.lootFilter = key
 	Render()
+end
+
+-- ===== Voidforge claims (CONTEXT.md: Claim, Voidforge Pool, Voidcore Track) =====
+--
+-- A Claim records an item the player has already won from a Voidforge roll, which
+-- the game then removes from that dungeon's future rolls at that Gear Track.
+-- Tracked per character (a Claim is a fact about the player's own rolls, not the
+-- Spec Selection), keyed dungeon + Track + item. The loot-spec filtering that
+-- decides which Drops can appear is handled by the journal data, so a Claim for an
+-- item the current spec can't get simply never surfaces — no per-spec key needed.
+local function GetClaims()
+	MythicLootCharDB.claims = MythicLootCharDB.claims or {}
+	return MythicLootCharDB.claims
+end
+
+local function ClaimKey(mapID, track, itemID)
+	return mapID .. ":" .. track .. ":" .. itemID
+end
+
+local function IsClaimed(mapID, track, itemID)
+	return itemID ~= nil and GetClaims()[ClaimKey(mapID, track, itemID)] == true
+end
+
+local function ToggleClaim(mapID, track, itemID)
+	if not (mapID and track and itemID) then return end
+	local claims = GetClaims()
+	local k = ClaimKey(mapID, track, itemID)
+	claims[k] = (not claims[k]) or nil
+	Render()
+end
+
+-- The Gear Track whose Voidforge pool the grid currently shows (a viewing choice,
+-- persisted per character; default Myth). Separate from the Track Floor — see
+-- CONTEXT.md: Voidcore Track.
+local function GetVoidcoreTrack()
+	return (MythicLootCharDB and MythicLootCharDB.voidcoreTrack) or DEFAULT_VOIDCORE_TRACK
+end
+
+-- The filter dropdown's label while the Voidforge lens is on, carrying the track.
+local function VoidforgeLabel(track)
+	return "Voidforge · " .. track
+end
+
+-- Voidforge is a per-Loot-Spec history (a Voidcore rolls against the player's
+-- Loot Spec table, not their Playing Spec), so the lens and the claim gestures
+-- are only meaningful while the Spec Selection matches the real Loot Spec — that's
+-- when the grid's loot table and the claims describe the same pool. (ADR 0008.)
+local function VoidforgeAvailable()
+	local classID, specID = GetSpecSelection()
+	local lClass, lSpec = MythicLoot.GetLootSpec()
+	return classID == lClass and specID == lSpec
 end
 
 local function GetStatPriority()
@@ -274,6 +336,8 @@ local function LootFilterReason(key)
 		return "Set a stat priority first — these rank loot by your stats."
 	elseif key == "favorited" and not HasFavorites() then
 		return "Favorite an item first — left-click a cell to pick one."
+	elseif key == "voidforge" and not VoidforgeAvailable() then
+		return "Switch to your loot spec (the Loot Spec button) to see what your Voidcores can still win."
 	end
 end
 
@@ -467,6 +531,14 @@ local function CreateCell()
 	cell.Heart:SetVertexColor(1, 0.32, 0.42)
 	cell.Heart:Hide()
 
+	-- Claimed mark: top-right corner, clear of the other three. Shown when the
+	-- Shown Drop is already won at the Voidcore Track (in every Loot Filter mode).
+	cell.Claimed = cell:CreateTexture(nil, "OVERLAY")
+	cell.Claimed:SetSize(14, 14)
+	cell.Claimed:SetPoint("TOPRIGHT", 3, 3)
+	cell.Claimed:SetTexture(CLAIMED_TEXTURE)
+	cell.Claimed:Hide()
+
 	cell:SetScript("OnEnter", function(self)
 		if not (self.link or self.itemID) then return end
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -482,6 +554,12 @@ local function CreateCell()
 			GameTooltip:AddLine(" ")
 			GameTooltip:AddLine(self.isFav and "Right-click to unfavorite."
 				or "Right-click to favorite.", 0.6, 0.6, 0.6)
+			if self.voidTrack then
+				GameTooltip:AddLine(self.isClaimed
+					and ("Won at " .. self.voidTrack .. " — shift+right-click to clear.")
+					or ("Shift+right-click: mark won at " .. self.voidTrack .. "."),
+					0.5, 0.8, 0.5)
+			end
 			if self.extraDrops and self.extraDrops > 0 then
 				GameTooltip:AddLine("Left-click for all " .. (self.extraDrops + 1)
 					.. " drops.", 0.6, 0.6, 0.6)
@@ -494,11 +572,18 @@ local function CreateCell()
 	end)
 	cell:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	cell:SetScript("OnClick", function(self, button)
-		-- Right-click is the quick Favorite toggle on the Shown Drop; left-click
-		-- (unmodified) opens the Drop Picker. Shift-left still links to chat.
-		-- These bindings are intentionally easy to retune in-game.
+		-- Right-click is the quick Favorite toggle on the Shown Drop;
+		-- shift+right-click toggles its Voidforge claim at the Voidcore Track;
+		-- left-click (unmodified) opens the Drop Picker. Shift-left still links to
+		-- chat. These bindings are intentionally easy to retune in-game.
 		if button == "RightButton" then
-			if self.itemID then ToggleFavorite(self.itemID) end
+			if IsShiftKeyDown() then
+				if self.itemID and self.voidTrack then
+					ToggleClaim(self.mapID, self.voidTrack, self.itemID)
+				end
+			elseif self.itemID then
+				ToggleFavorite(self.itemID)
+			end
 		elseif self.link and IsModifiedClick("CHATLINK") then
 			ChatEdit_InsertLink(self.link)
 		elseif self.OpenPicker then
@@ -527,11 +612,14 @@ local function SetCellItem(cell, item, extra)
 	cell.extraDrops = extra
 	cell.statTier = 0
 	cell.Star:Hide()
+	cell.isClaimed = false
+	cell.Claimed:Hide()
 end
 
 local function SetCellEmpty(cell)
 	cell.itemID = nil
 	cell.link = nil
+	cell.voidTrack = nil
 	cell.Icon:Hide()
 	cell.Empty:Show()
 	cell.Count:SetText("")
@@ -540,12 +628,20 @@ local function SetCellEmpty(cell)
 	cell.statTier = 0
 	cell.Star:Hide()
 	cell.Heart:Hide()
+	cell.isClaimed = false
+	cell.Claimed:Hide()
 end
 
 -- Show or hide this cell's Favorite heart (the Shown Drop is Favorited).
 local function SetCellHeart(cell, isFav)
 	cell.isFav = isFav and true or false
 	cell.Heart:SetShown(cell.isFav)
+end
+
+-- Show or hide this cell's Claimed mark (the Shown Drop is won at the Voidcore Track).
+local function SetCellClaimed(cell, isClaimed)
+	cell.isClaimed = isClaimed and true or false
+	cell.Claimed:SetShown(cell.isClaimed)
 end
 
 -- Show this cell's Stat Tier badge (1 bronze / 2 silver / 3 gold), or hide it.
@@ -780,7 +876,7 @@ end
 -- it is about (dimming the Cell if none qualifies); the All view honors a Pin,
 -- else the best-tier Favorite, else the best Stat Tier Drop. The Cell's star and
 -- heart always describe whichever Drop this returns.
-local function ResolveCell(items, slot, mapID, statPriority, statActive, filter)
+local function ResolveCell(items, slot, mapID, statPriority, statActive, filter, claimedNow)
 	local canTier = statActive and slot.key ~= "Other"
 	local function tierOf(it)
 		return canTier and MythicLoot.ItemStatTier(it.link, statPriority) or 0
@@ -812,7 +908,22 @@ local function ResolveCell(items, slot, mapID, statPriority, statActive, filter)
 	end
 
 	local shown, tier, passes
-	if filter == "favorited" then
+	if filter == "voidforge" then
+		-- The Cell passes while any Drop here is still unclaimed at the Voidcore
+		-- Track; show the first such Drop (or a pinned one if it's still rollable),
+		-- so the lit cells read as "where a Voidcore can still win me something".
+		local avail
+		for _, it in ipairs(items) do
+			if not claimedNow(it.itemID) then avail = it break end
+		end
+		passes = avail ~= nil
+		if pinDrop and not claimedNow(pinDrop.itemID) then
+			shown = pinDrop
+		else
+			shown = avail or items[1]
+		end
+		tier = tierOf(shown)
+	elseif filter == "favorited" then
 		passes = favDrop ~= nil
 		-- Whether the Cell passes depends on any Favorite existing, but a pinned
 		-- Favorite still wins which one shows — so re-pinning updates live.
@@ -848,6 +959,7 @@ local function ResolveCell(items, slot, mapID, statPriority, statActive, filter)
 		tier = tier,
 		extra = #items - 1,
 		isFav = IsFavorite(shown.itemID),
+		isClaimed = claimedNow(shown.itemID),
 		passes = passes,
 	}
 end
@@ -889,6 +1001,21 @@ local function OpenDropPicker(cell)
 				function() SetPin(mapID, slotKey, d.itemID) end)
 			r:SetTooltip(function(tooltip) tooltip:SetHyperlink(d.link) end)
 		end
+
+		-- Voidforge: mark which Drops you've already won at the Voidcore Track.
+		-- Only offered while viewing your own spec (claims are your Loot Spec
+		-- history); the marks then drive the "Voidforge (what's left)" lens.
+		if VoidforgeAvailable() then
+			local track = GetVoidcoreTrack()
+			root:CreateDivider()
+			root:CreateTitle("Won at " .. track)
+			for _, it in ipairs(items) do
+				local d = it
+				root:CreateCheckbox(DropLabel(d, tierOf(d)),
+					function() return IsClaimed(mapID, track, d.itemID) end,
+					function() ToggleClaim(mapID, track, d.itemID) end)
+			end
+		end
 	end)
 end
 
@@ -924,11 +1051,43 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 		table.insert(list, item)
 	end
 
+	-- Voidforge claim state for this dungeon at the viewing Track. Claims are the
+	-- player's own Loot Spec history, so they only count while viewing their own
+	-- spec. The whole pool (all loot-spec Drops) resets once every item is Claimed,
+	-- so a fully-claimed dungeon reads as freshly full, never empty (CONTEXT.md:
+	-- Voidforge Pool).
+	local ownSpec = VoidforgeAvailable()
+	local voidTrack = GetVoidcoreTrack()
+	local poolExhausted = false
+	if ownSpec then
+		local total, claimed = 0, 0
+		for _, item in ipairs(loot.items) do
+			total = total + 1
+			if IsClaimed(mapID, voidTrack, item.itemID) then claimed = claimed + 1 end
+		end
+		if total > 0 and claimed == total then
+			-- The game reopens a Pool the instant its last item is won, so a fully
+			-- claimed pool is really a fresh one. Clear the now-void Claims from
+			-- saved state (not just the display) to match — otherwise the next
+			-- toggle drops claimed below total, resurrecting the stale claims and
+			-- making the pool look exhausted again (ADR 0008 reset rule).
+			local claims = GetClaims()
+			for _, item in ipairs(loot.items) do
+				claims[ClaimKey(mapID, voidTrack, item.itemID)] = nil
+			end
+			poolExhausted = true
+		end
+	end
+	local function claimedNow(itemID)
+		if not ownSpec or poolExhausted then return false end
+		return IsClaimed(mapID, voidTrack, itemID)
+	end
+
 	local resolved = {}
 	for key, items in pairs(bySlot) do
 		local slot = MythicLoot.GetSlotByKey(key)
 		if slot then
-			resolved[key] = ResolveCell(items, slot, mapID, statPriority, statActive, lootFilter)
+			resolved[key] = ResolveCell(items, slot, mapID, statPriority, statActive, lootFilter, claimedNow)
 		end
 	end
 
@@ -967,11 +1126,14 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 		cell.slotKey = slot.key
 		cell.drops = bySlot[slot.key]
 		cell.OpenPicker = OpenDropPicker
+		-- Only enable claim gestures/marks while viewing the player's own spec.
+		cell.voidTrack = ownSpec and voidTrack or nil
 		local r = resolved[slot.key]
 		if r then
 			SetCellItem(cell, r.shown, r.extra)
 			SetCellStar(cell, r.tier)
 			SetCellHeart(cell, r.isFav)
+			SetCellClaimed(cell, r.isClaimed)
 		else
 			SetCellEmpty(cell)
 		end
@@ -998,8 +1160,12 @@ function Render()
 	-- matching what's actually in effect.
 	local lootFilter = EffectiveLootFilter()
 	if filterDropdown then
-		for _, f in ipairs(LOOT_FILTERS) do
-			if f.key == lootFilter then filterDropdown:SetText(f.label) end
+		if lootFilter == "voidforge" then
+			filterDropdown:SetText(VoidforgeLabel(GetVoidcoreTrack()))
+		else
+			for _, f in ipairs(LOOT_FILTERS) do
+				if f.key == lootFilter then filterDropdown:SetText(f.label) end
+			end
 		end
 	end
 
@@ -1228,18 +1394,36 @@ local function CreateToolbar()
 			-- here reflects current state. Grey out options whose data isn't there
 			-- yet, and explain why on hover.
 			local reason = LootFilterReason(key)
-			local radio = rootDescription:CreateRadio(f.label,
-				function() return EffectiveLootFilter() == key end,
-				function()
-					SetLootFilter(key)
-					filterDropdown:SetText(f.label)
-				end)
-			radio:SetEnabled(reason == nil)
-			if reason then
-				radio:SetTooltip(function(tooltip)
-					GameTooltip_SetTitle(tooltip, f.label)
-					GameTooltip_AddNormalLine(tooltip, reason)
-				end)
+			if key == "voidforge" and reason == nil then
+				-- Voidforge carries a Track choice, so it's a submenu: picking a track
+				-- both turns the lens on and sets which Voidcore pool to view. The
+				-- Voidcore Track persists, so the always-on Claimed marks use it too.
+				local sub = rootDescription:CreateButton(f.label)
+				for _, track in ipairs(MythicLoot.TRACK_ORDER) do
+					sub:CreateRadio(track,
+						function()
+							return EffectiveLootFilter() == "voidforge" and GetVoidcoreTrack() == track
+						end,
+						function()
+							MythicLootCharDB.voidcoreTrack = track
+							SetLootFilter("voidforge")
+							filterDropdown:SetText(VoidforgeLabel(track))
+						end)
+				end
+			else
+				local radio = rootDescription:CreateRadio(f.label,
+					function() return EffectiveLootFilter() == key end,
+					function()
+						SetLootFilter(key)
+						filterDropdown:SetText(f.label)
+					end)
+				radio:SetEnabled(reason == nil)
+				if reason then
+					radio:SetTooltip(function(tooltip)
+						GameTooltip_SetTitle(tooltip, f.label)
+						GameTooltip_AddNormalLine(tooltip, reason)
+					end)
+				end
 			end
 		end
 	end)

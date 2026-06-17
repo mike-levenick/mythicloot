@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Voidforge tracking** — mark which items you've already won from a Voidcore bonus roll, per dungeon and per Gear Track, and the new "Voidforge (what's left)" filter lights only the dungeons where a Voidcore can still win you something. A green check marks claimed drops in every view. Mark a drop via shift+right-click, or tick "Won at <track>" in the Drop Picker; pick the track your keys roll at from the filter's submenu (defaults to Myth). Saved per character, shown only while viewing your own spec. (ADR 0008)
+
+### Changed
+
+- **Faster opens** — the dungeon loot table is now cached between sessions and painted instantly, then refreshed from the game in the background, so you no longer watch it load every time. (ADR 0007)
+
 ## v1.1.0 — 2026-06-15
 
 ### Added
