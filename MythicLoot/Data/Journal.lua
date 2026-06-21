@@ -266,6 +266,14 @@ function Journal:RequestLoot(classID, specID)
 	NextDungeon()
 end
 
+-- Whether a spec's loot has finished loading (used by the data exporter to walk
+-- specs one at a time). Note: in-instance this flips true immediately on the
+-- cache-served entry, so the exporter must run out of a dungeon for real reads.
+function Journal:IsSpecComplete(classID, specID)
+	local entry = cache[SpecKey(classID, specID)]
+	return entry ~= nil and entry.complete == true
+end
+
 -- Returns an array of {info = rotationEntry, loot = {items, slotSet} | nil},
 -- or nil while the Season Rotation itself is still unknown.
 function Journal:GetDungeonData(classID, specID)

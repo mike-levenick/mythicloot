@@ -15,4 +15,5 @@ Data/Journal.lua
 Data/Teleports.lua
 Data/Gear.lua
 Data/VoidCheck.lua
+Data/Export.lua
 UI/MainWindow.lua
