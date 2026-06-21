@@ -8,7 +8,7 @@
 
 ### Changed
 
-- **Faster opens** — the dungeon loot table is now cached between sessions and painted instantly, then refreshed from the game in the background, so you no longer watch it load every time. (ADR 0007)
+- **Loot data is now built in** — the dungeon loot tables ship with the addon instead of being read from the game each session. Opens are instant, the data is identical everywhere (including inside a dungeon, where the game journal used to show every dungeon the same), and there's no more loading flicker. (ADR 0009, supersedes the runtime cache from ADR 0007)
 
 ## v1.1.0 — 2026-06-15
 

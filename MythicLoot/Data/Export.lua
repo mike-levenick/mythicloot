@@ -34,7 +34,7 @@ end
 -- {id, slot, name, icon} — enough to render a cell offline (tooltip via
 -- SetItemByID, chat link resolved lazily), nothing player- or session-specific.
 local function HarvestSpec(classID, specID)
-	local data = MythicLoot.Journal:GetDungeonData(classID, specID)
+	local data = MythicLoot.Journal:GetLiveDungeonData(classID, specID)
 	local byMap = {}
 	for _, d in ipairs(data) do
 		if d.loot and d.loot.items and d.info and d.info.challengeMapID then
@@ -90,7 +90,7 @@ local function Run()
 			return
 		end
 		local job = jobs[n]
-		MythicLoot.Journal:RequestLoot(job.classID, job.specID)
+		MythicLoot.Journal:RequestLiveLoot(job.classID, job.specID)
 		local function wait(tries)
 			if MythicLoot.Journal:IsSpecComplete(job.classID, job.specID) then
 				out[job.classID] = out[job.classID] or {}

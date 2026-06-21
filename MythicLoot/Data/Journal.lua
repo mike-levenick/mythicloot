@@ -226,9 +226,11 @@ function TryRead()
 	end
 end
 
--- Starts loading loot for a spec unless already cached/in-flight.
--- Progress is reported through the callback after each dungeon.
-function Journal:RequestLoot(classID, specID)
+-- Live EJ read for one spec. Since the loot table now ships (ADR 0009), this is
+-- used ONLY by the exporter (Data/Export.lua) to regenerate the bundle — it's the
+-- last code path that touches the Encounter Journal. The normal runtime reads the
+-- shipped table via GetDungeonData below.
+function Journal:RequestLiveLoot(classID, specID)
 	local key = SpecKey(classID, specID)
 	local entry = cache[key]
 	if entry and (entry.complete or entry.loading) then return end
@@ -274,9 +276,8 @@ function Journal:IsSpecComplete(classID, specID)
 	return entry ~= nil and entry.complete == true
 end
 
--- Returns an array of {info = rotationEntry, loot = {items, slotSet} | nil},
--- or nil while the Season Rotation itself is still unknown.
-function Journal:GetDungeonData(classID, specID)
+-- Live (EJ-read) dungeon data, used by the exporter to harvest the bundle.
+function Journal:GetLiveDungeonData(classID, specID)
 	local rot = self:GetRotation()
 	if not rot then return nil end
 	local entry = cache[SpecKey(classID, specID)]
@@ -290,6 +291,61 @@ function Journal:GetDungeonData(classID, specID)
 	return result
 end
 
+-- ===== Shipped loot (ADR 0009) — the normal runtime path =====
+-- Read the bundled SeasonLoot table instead of the live EJ: no async, no
+-- in-instance freeze, the same data everywhere including mid-dungeon. Built lazily
+-- per spec into the shape the UI/Voidforge already expect, then memoised (the
+-- bundle is static). A "item:<id>" itemString stands in for the full link — enough
+-- for the tooltip, the Stat Tier read (C_Item.GetItemStats), and a chat insert.
+local builtBySpec = {}
+
+local function BuildSpec(classID, specID)
+	local byMap = {}
+	local bySpec = MythicLoot.SeasonLoot and MythicLoot.SeasonLoot[classID]
+	local src = bySpec and bySpec[specID]
+	if not src then return byMap end
+	for mapID, rows in pairs(src) do
+		local items, slotSet = {}, {}
+		for _, r in ipairs(rows) do
+			local slot = MythicLoot.GetSlotByKey(r.slot)
+			items[#items + 1] = {
+				itemID = r.id,
+				name = r.name,
+				icon = r.icon,
+				link = "item:" .. r.id,
+				slotKey = r.slot,
+				slotOrder = slot and slot.order,
+			}
+			slotSet[r.slot] = true
+		end
+		byMap[mapID] = { items = items, slotSet = slotSet }
+	end
+	return byMap
+end
+
+-- Returns an array of {info = rotationEntry, loot = {items, slotSet} | nil}, or
+-- nil while the Season Rotation itself is still unknown (the rotation list is the
+-- only thing still fetched at runtime, via GetRotation).
+function Journal:GetDungeonData(classID, specID)
+	local rot = self:GetRotation()
+	if not rot then return nil end
+	local key = SpecKey(classID, specID)
+	local byMap = builtBySpec[key]
+	if not byMap then
+		byMap = BuildSpec(classID, specID)
+		builtBySpec[key] = byMap
+	end
+	local result = {}
+	for _, dungeon in ipairs(rot) do
+		table.insert(result, { info = dungeon, loot = byMap[dungeon.challengeMapID] })
+	end
+	return result
+end
+
+-- Loot is bundled, so there is nothing to load at runtime. Kept as a no-op so the
+-- existing callers (window open, spec change, Voidforge) need no change.
+function Journal:RequestLoot() end
+
 Journal:RegisterEvent("PLAYER_LOGIN")
 Journal:SetScript("OnEvent", function(self, event)
 	if event == "PLAYER_LOGIN" then
@@ -302,7 +358,7 @@ Journal:SetScript("OnEvent", function(self, event)
 		if pendingSpec then
 			local spec = pendingSpec
 			pendingSpec = nil
-			self:RequestLoot(spec.classID, spec.specID)
+			self:RequestLiveLoot(spec.classID, spec.specID)
 		end
 		Notify()
 	end

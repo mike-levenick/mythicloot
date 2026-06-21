@@ -11,6 +11,7 @@
 
 Core.lua
 Data/Slots.lua
+Data/SeasonLoot.lua
 Data/Journal.lua
 Data/Teleports.lua
 Data/Gear.lua
