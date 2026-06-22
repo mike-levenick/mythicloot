@@ -1,9 +1,11 @@
 local ADDON_NAME, MythicLoot = ...
 
--- Loads the Season Rotation and per-spec loot from the game's Encounter
--- Journal at runtime (ADR 0002). All reads are async-tolerant: loot info
--- arrives over EJ_LOOT_DATA_RECIEVED (Blizzard's spelling) and we re-read
--- until every item resolves, then cache for the session.
+-- Serves per-spec dungeon loot to the addon. The Season Rotation (dungeon list)
+-- is fetched at runtime from C_ChallengeMode, but loot now comes from the shipped
+-- SeasonLoot bundle (ADR 0009) — GetDungeonData reads that, no Encounter Journal
+-- on the normal path. The live EJ reader below (RequestLiveLoot/GetLiveDungeonData
+-- and the EJ_LOOT_DATA_RECIEVED machinery) is retained only for /ml export, which
+-- regenerates the bundle; it is the addon's sole remaining EJ reader.
 
 local Journal = CreateFrame("Frame")
 MythicLoot.Journal = Journal
@@ -12,7 +14,7 @@ local MYTHIC_DUNGEON_DIFFICULTY = 23
 local MAX_RETRIES_PER_DUNGEON = 25
 local RETRY_INTERVAL = 0.3
 
-local rotation       -- array of {challengeMapID, name, icon, journalInstanceID, tier}
+local rotation       -- array of {challengeMapID, name, icon}; journalInstanceID/tier added lazily (exporter only)
 local instanceByName -- EJ dungeon name -> journalInstanceID, all expansions
 local instanceTier   -- journalInstanceID -> EJ tier index it lives in
 local cache = {}     -- "classID-specID" -> {byMap = {challengeMapID -> {items, slotSet}}, complete, loading}
@@ -81,8 +83,24 @@ local function FindJournalInstance(challengeMapName)
 	end
 end
 
+-- Lazily resolve a rotation entry's EJ instance + tier. Only the exporter's live
+-- reads need these, so the normal runtime (which reads the shipped bundle) never
+-- touches the Encounter Journal — we resolve on demand the first time /ml export
+-- reads a dungeon's loot (ADR 0009). FindJournalInstance may return nil (no match);
+-- journalChecked records that we tried so we don't rescan every read.
+local function EnsureJournalInfo(dungeon)
+	if dungeon.journalChecked then return end
+	dungeon.journalChecked = true
+	BuildInstanceIndex()
+	local jid = FindJournalInstance(dungeon.name)
+	dungeon.journalInstanceID = jid
+	dungeon.tier = jid and instanceTier[jid]
+end
+
 -- Returns the Season Rotation, or nil if the server hasn't sent the map
--- list yet (a request is issued; CHALLENGE_MODE_MAPS_UPDATE follows).
+-- list yet (a request is issued; CHALLENGE_MODE_MAPS_UPDATE follows). Built purely
+-- from C_ChallengeMode — no EJ read; the journal instance/tier are filled in lazily
+-- (see EnsureJournalInfo) only when the exporter needs them.
 function Journal:GetRotation()
 	if rotation then return rotation end
 	local mapIDs = C_ChallengeMode.GetMapTable()
@@ -90,38 +108,17 @@ function Journal:GetRotation()
 		C_MythicPlus.RequestMapInfo()
 		return nil
 	end
-	BuildInstanceIndex()
 	rotation = {}
 	for _, mapID in ipairs(mapIDs) do
 		local name, _, _, texture = C_ChallengeMode.GetMapUIInfo(mapID)
 		if name then
-			local jid = FindJournalInstance(name)
 			table.insert(rotation, {
 				challengeMapID = mapID,
 				name = name,
 				icon = texture,
-				journalInstanceID = jid,
-				tier = jid and instanceTier[jid],
 			})
 		end
 	end
-	-- Diagnostic: distinct dungeons must map to distinct journal instances. If
-	-- they don't, loot would be identical across rows for a different reason
-	-- than the stale-read race; surface it so we know which bug we're chasing.
-	local seenInstance = {}
-	for _, dungeon in ipairs(rotation) do
-		local id = dungeon.journalInstanceID
-		if id then
-			if seenInstance[id] then
-				print("|cffff8000MythicLoot:|r '" .. dungeon.name
-					.. "' resolved to the same journal instance as '" .. seenInstance[id]
-					.. "' — loot mapping is wrong, please report.")
-			else
-				seenInstance[id] = dungeon.name
-			end
-		end
-	end
-
 	return rotation
 end
 
@@ -171,6 +168,7 @@ function NextDungeon()
 		FinishRequest()
 		return
 	end
+	EnsureJournalInfo(dungeon) -- resolve EJ instance/tier on demand (exporter path)
 	if not dungeon.journalInstanceID then
 		-- No EJ match (shouldn't happen for standard rotations); show an empty row rather than wedge the queue.
 		request.entry.byMap[dungeon.challengeMapID] = { items = {}, slotSet = {}, missing = true }
@@ -226,9 +224,11 @@ function TryRead()
 	end
 end
 
--- Starts loading loot for a spec unless already cached/in-flight.
--- Progress is reported through the callback after each dungeon.
-function Journal:RequestLoot(classID, specID)
+-- Live EJ read for one spec. Since the loot table now ships (ADR 0009), this is
+-- used ONLY by the exporter (Data/Export.lua) to regenerate the bundle — it's the
+-- last code path that touches the Encounter Journal. The normal runtime reads the
+-- shipped table via GetDungeonData below.
+function Journal:RequestLiveLoot(classID, specID)
 	local key = SpecKey(classID, specID)
 	local entry = cache[key]
 	if entry and (entry.complete or entry.loading) then return end
@@ -266,9 +266,16 @@ function Journal:RequestLoot(classID, specID)
 	NextDungeon()
 end
 
--- Returns an array of {info = rotationEntry, loot = {items, slotSet} | nil},
--- or nil while the Season Rotation itself is still unknown.
-function Journal:GetDungeonData(classID, specID)
+-- Whether a spec's loot has finished loading (used by the data exporter to walk
+-- specs one at a time). Note: in-instance this flips true immediately on the
+-- cache-served entry, so the exporter must run out of a dungeon for real reads.
+function Journal:IsSpecComplete(classID, specID)
+	local entry = cache[SpecKey(classID, specID)]
+	return entry ~= nil and entry.complete == true
+end
+
+-- Live (EJ-read) dungeon data, used by the exporter to harvest the bundle.
+function Journal:GetLiveDungeonData(classID, specID)
 	local rot = self:GetRotation()
 	if not rot then return nil end
 	local entry = cache[SpecKey(classID, specID)]
@@ -282,6 +289,82 @@ function Journal:GetDungeonData(classID, specID)
 	return result
 end
 
+-- ===== Shipped loot (ADR 0009) — the normal runtime path =====
+-- Read the bundled SeasonLoot table instead of the live EJ: no async, no
+-- in-instance freeze, the same data everywhere including mid-dungeon. Built lazily
+-- per spec into the shape the UI/Voidforge already expect, then memoised (the
+-- bundle is static). A "item:<id>" itemString stands in for the full link — enough
+-- for the tooltip, the Stat Tier read (C_Item.GetItemStats), and a chat insert.
+local builtBySpec = {}
+local displayTrackBonus -- the upgrade-track bonus the bundled links are built at
+
+-- Choose the Gear Track the bundled loot's item levels display at. The UI ties this
+-- to "Help me reach" (default Myth, see ADR 0009). Rebuilds the cached links when it
+-- changes, so the tooltips update live.
+function Journal:SetDisplayTrack(trackName)
+	local bonus = MythicLoot.SeasonTrackBonus
+		and (MythicLoot.SeasonTrackBonus[trackName] or MythicLoot.SeasonTrackBonus.Myth)
+	if bonus ~= displayTrackBonus then
+		displayTrackBonus = bonus
+		wipe(builtBySpec)
+	end
+end
+
+local function BuildSpec(classID, specID)
+	local byMap = {}
+	local bySpec = MythicLoot.SeasonLoot and MythicLoot.SeasonLoot[classID]
+	local src = bySpec and bySpec[specID]
+	if not src then return byMap end
+	for mapID, rows in pairs(src) do
+		local items, slotSet = {}, {}
+		for _, r in ipairs(rows) do
+			local slot = MythicLoot.GetSlotByKey(r.slot)
+			-- A real item hyperlink built at the display Track, so the tooltip shows
+			-- the right item level (e.g. Myth 1/6) and every other consumer works too:
+			-- Stat Tier (GetItemStats), the Drop Picker label, and a clickable chat
+			-- insert. Colourless (we don't ship quality).
+			items[#items + 1] = {
+				itemID = r.id,
+				name = r.name,
+				icon = r.icon,
+				link = MythicLoot.BuildItemLink(r.id, r.name, displayTrackBonus),
+				slotKey = r.slot,
+				slotOrder = slot and slot.order,
+			}
+			slotSet[r.slot] = true
+		end
+		byMap[mapID] = { items = items, slotSet = slotSet }
+	end
+	return byMap
+end
+
+-- Returns an array of {info = rotationEntry, loot = {items, slotSet} | nil}, or
+-- nil while the Season Rotation itself is still unknown (the rotation list is the
+-- only thing still fetched at runtime, via GetRotation).
+function Journal:GetDungeonData(classID, specID)
+	local rot = self:GetRotation()
+	if not rot then return nil end
+	local key = SpecKey(classID, specID)
+	local byMap = builtBySpec[key]
+	if not byMap then
+		byMap = BuildSpec(classID, specID)
+		builtBySpec[key] = byMap
+	end
+	local result = {}
+	for _, dungeon in ipairs(rot) do
+		-- A dungeon absent from the bundle (new rotation entry, export gap) renders
+		-- as "missing", not a perpetual "Loading…" — nothing loads at runtime now.
+		local loot = byMap[dungeon.challengeMapID]
+			or { items = {}, slotSet = {}, missing = true }
+		table.insert(result, { info = dungeon, loot = loot })
+	end
+	return result
+end
+
+-- Loot is bundled, so there is nothing to load at runtime. Kept as a no-op so the
+-- existing callers (window open, spec change, Voidforge) need no change.
+function Journal:RequestLoot() end
+
 Journal:RegisterEvent("PLAYER_LOGIN")
 Journal:SetScript("OnEvent", function(self, event)
 	if event == "PLAYER_LOGIN" then
@@ -294,7 +377,7 @@ Journal:SetScript("OnEvent", function(self, event)
 		if pendingSpec then
 			local spec = pendingSpec
 			pendingSpec = nil
-			self:RequestLoot(spec.classID, spec.specID)
+			self:RequestLiveLoot(spec.classID, spec.specID)
 		end
 		Notify()
 	end

@@ -964,11 +964,14 @@ local function ResolveCell(items, slot, mapID, statPriority, statActive, filter,
 	}
 end
 
--- Menu label for a Drop: item icon, its colored name (from the link), and the
--- Stat Tier medallion when it has one.
+-- Menu label for a Drop: item icon, its name, and the Stat Tier medallion when it
+-- has one. Prefer a real hyperlink (colored, clickable) when we have one; the
+-- shipped loot only carries a bare "item:<id>" itemString, so fall back to the
+-- plain name rather than render the itemString text.
 local function DropLabel(it, tier)
 	local icon = "|T" .. (it.icon or 134400) .. ":16:16:0:0|t "
-	local name = it.link or it.name or ("item:" .. tostring(it.itemID))
+	local linkIsReal = it.link and it.link:find("|H", 1, true)
+	local name = (linkIsReal and it.link) or it.name or ("item:" .. tostring(it.itemID))
 	local medal = (tier and tier > 0)
 		and (" |A:Professions-Icon-Quality-Tier" .. tier .. ":14:14|a") or ""
 	return icon .. name .. medal
@@ -1181,6 +1184,12 @@ function Render()
 	UpdateHeaders(columns, numCols, checkedSet, filtered)
 	UpdateColumnHighlights(columns, numCols, checkedSet, filtered)
 
+	-- Show loot item levels at the "Help me reach" track (default Myth 1/6 when the
+	-- dropdown is blank). The Journal rebuilds its links if this changed.
+	if MythicLoot.Journal.SetDisplayTrack then
+		MythicLoot.Journal:SetDisplayTrack(activeFloor or "Myth")
+	end
+
 	local classID, specID = GetSpecSelection()
 	local data = MythicLoot.Journal:GetDungeonData(classID, specID)
 	if not data then
@@ -1329,7 +1338,7 @@ local function CreateToolbar()
 		rootDescription:CreateRadio("—",
 			function() return activeFloor == nil end,
 			function() ClearActiveFloor() end)
-		for _, track in ipairs(MythicLoot.TRACK_ORDER) do
+		for _, track in ipairs(MythicLoot.TARGET_TRACKS) do
 			rootDescription:CreateRadio(track,
 				function() return activeFloor == track end,
 				function()
@@ -1399,6 +1408,9 @@ local function CreateToolbar()
 				-- both turns the lens on and sets which Voidcore pool to view. The
 				-- Voidcore Track persists, so the always-on Claimed marks use it too.
 				local sub = rootDescription:CreateButton(f.label)
+				-- Voidcore tracks are the full ladder (TRACK_ORDER), independent of the
+				-- "Help me reach" TARGET_TRACKS (which drops Explorer): a Voidcore can
+				-- roll at any Gear Track, unrelated to the season ilvl bonus table.
 				for _, track in ipairs(MythicLoot.TRACK_ORDER) do
 					sub:CreateRadio(track,
 						function()

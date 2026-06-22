@@ -18,6 +18,33 @@ end
 MythicLoot.TRACK_ORDER = TRACK_ORDER
 MythicLoot.DEFAULT_TRACK_FLOOR = "Hero"
 
+-- Upgrade-track bonus IDs for this season's gear, level 1 of each track. Appending
+-- one to an item link makes the game render that track's item level, so bundled
+-- loot can be shown at e.g. Myth 1/6 (ADR 0009). Derived from equipped-gear links
+-- via /ml updump (Midnight S1, build 120007): Champion (12785), Hero (12793), Myth
+-- (12801) observed directly — level N is base+(N-1), tracks +8 apart — with
+-- Adventurer/Veteran extrapolated and confirmed in-game. Explorer alone breaks the
+-- spacing (its real bonus is elsewhere), so it's dropped rather than shipped wrong.
+MythicLoot.SeasonTrackBonus = {
+	Adventurer = 12769, Veteran = 12777,
+	Champion = 12785, Hero = 12793, Myth = 12801,
+}
+
+-- The Gear Tracks offered as upgrade targets in "Help me reach" (and the item level
+-- the grid shows loot at): the full ladder minus Explorer, whose season bonus ID
+-- isn't confirmed.
+MythicLoot.TARGET_TRACKS = { "Adventurer", "Veteran", "Champion", "Hero", "Myth" }
+
+-- Build a colourless item hyperlink for a bundled drop. With a trackBonus, the
+-- game shows that upgrade track's item level; without one, the base item level.
+-- The colons pad the itemString to the itemContext(35)+single-bonus position.
+function MythicLoot.BuildItemLink(id, name, trackBonus)
+	local itemString = trackBonus
+		and ("item:" .. id .. string.rep(":", 11) .. "35:1:" .. trackBonus)
+		or ("item:" .. id)
+	return "|cffffffff|H" .. itemString .. "|h[" .. (name or ("item:" .. id)) .. "]|h|r"
+end
+
 -- Slot (grid column) key -> the character-sheet inventory slot name(s) it covers.
 -- Finger and Trinket each cover two equipped items; "Other" has no Gear Track
 -- and is omitted entirely.
@@ -159,6 +186,41 @@ function MythicLoot.ItemStatTier(itemLink, priority)
 	if hasFirst then return 2 end
 	if hasSecond then return 1 end
 	return 0
+end
+
+-- TEMPORARY diagnostic (/ml updump): record each equipped item's full link +
+-- upgrade info + decomposed item string to SavedVariables, so the season's
+-- track-upgrade encoding can be reverse-engineered for track-targeted item levels
+-- (ADR 0009 follow-up). Delete once the TRACK_BONUS table is built.
+function MythicLoot.DumpUpgrades()
+	MythicLootGlobalDB = MythicLootGlobalDB or {}
+	local dump = {}
+	for _, slotKey in ipairs({
+		"Head", "Neck", "Shoulder", "Cloak", "Chest", "Wrist", "Hand", "Waist",
+		"Legs", "Feet", "MainHand", "OffHand", "Finger", "Trinket",
+	}) do
+		for _, name in ipairs(SLOT_INV[slotKey]) do
+			local link = GetInventoryItemLink("player", InvID(name))
+			if link then
+				local info = C_Item.GetItemUpgradeInfo(link)
+				local eff, _, base = C_Item.GetDetailedItemLevelInfo(link)
+				table.insert(dump, {
+					slot = name,
+					link = link,
+					itemString = link:match("|H(item[%-:%d]+)|h"),
+					trackString = info and info.trackString,
+					trackStringID = info and info.trackStringID,
+					currentLevel = info and info.currentLevel,
+					maxLevel = info and info.maxLevel,
+					effectiveILvl = eff,
+					baseILvl = base,
+				})
+			end
+		end
+	end
+	MythicLootGlobalDB.upgradeDump = dump
+	print("|cff33ff66MythicLoot|r: dumped " .. #dump
+		.. " equipped items to SavedVariables — /reload, then tell Claude.")
 end
 
 -- Diagnostic (/ml tracks): dump each equipped item's track so the live,

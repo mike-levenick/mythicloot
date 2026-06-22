@@ -53,6 +53,14 @@ SlashCmdList.MYTHICLOOT = function(msg)
 		MythicLoot.VoidCheck(arg)
 		return
 	end
+	if cmd == "export" and MythicLoot.ExportLoot then
+		MythicLoot.ExportLoot()
+		return
+	end
+	if cmd == "updump" and MythicLoot.DumpUpgrades then
+		MythicLoot.DumpUpgrades()
+		return
+	end
 	MythicLoot:ToggleWindow()
 end
 
