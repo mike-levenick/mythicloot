@@ -352,7 +352,11 @@ function Journal:GetDungeonData(classID, specID)
 	end
 	local result = {}
 	for _, dungeon in ipairs(rot) do
-		table.insert(result, { info = dungeon, loot = byMap[dungeon.challengeMapID] })
+		-- A dungeon absent from the bundle (new rotation entry, export gap) renders
+		-- as "missing", not a perpetual "Loading…" — nothing loads at runtime now.
+		local loot = byMap[dungeon.challengeMapID]
+			or { items = {}, slotSet = {}, missing = true }
+		table.insert(result, { info = dungeon, loot = loot })
 	end
 	return result
 end

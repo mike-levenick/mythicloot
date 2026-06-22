@@ -36,9 +36,10 @@ Remove the live EJ reads from the normal path.
 **Generation is self-harvest, in-game, clean-room.** `Data/Export.lua` (`/ml export`)
 walks our *existing* EJ reader across every class/spec × every rotation dungeon,
 **out of a dungeon**, and dumps the result into a SavedVariable. WoW serialises that
-to disk as a Lua table literal, which we hand-copy into `SeasonLoot.lua`. So the data
-is Blizzard's, read through our own code — never another addon ([[0001]]). Refreshing
-each season is "run `/ml export`, paste, commit."
+to disk as a Lua table literal, which `tools/gen_seasonloot.lua` turns into the
+committed `SeasonLoot.lua` (sorted/deterministic). So the data is Blizzard's, read
+through our own code — never another addon ([[0001]]). Refreshing each season is "run
+`/ml export`, run the generator, commit."
 
 **Shape:** `SeasonLoot[classID][specID][challengeMapID] = { {id, slot, name, icon}, … }`.
 That renders a cell fully offline (icon + name + slot column); tooltips use

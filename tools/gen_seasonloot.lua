@@ -48,9 +48,15 @@ for _, classID in ipairs(sortedKeys(loot)) do
     for _, mapID in ipairs(sortedKeys(byMap)) do
       w("[" .. mapID .. "]={")
       for _, it in ipairs(byMap[mapID]) do
+        -- Fail loudly on an incomplete row rather than baking name="nil"/slot="nil"
+        -- into the shipped file — the export should be re-run instead.
+        if not (it.id and it.slot and it.name) then
+          error(string.format("incomplete loot row at class/spec/map %s/%s/%s: %s",
+            classID, specID, mapID, tostring(it.id or it.name)))
+        end
         nItems = nItems + 1
         w(string.format("{id=%d,slot=%q,name=%q,icon=%d},",
-          it.id, tostring(it.slot), tostring(it.name), it.icon or 0))
+          it.id, it.slot, it.name, it.icon or 0))
       end
       w("},")
     end
