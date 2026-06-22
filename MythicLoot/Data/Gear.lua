@@ -161,6 +161,41 @@ function MythicLoot.ItemStatTier(itemLink, priority)
 	return 0
 end
 
+-- TEMPORARY diagnostic (/ml updump): record each equipped item's full link +
+-- upgrade info + decomposed item string to SavedVariables, so the season's
+-- track-upgrade encoding can be reverse-engineered for track-targeted item levels
+-- (ADR 0009 follow-up). Delete once the TRACK_BONUS table is built.
+function MythicLoot.DumpUpgrades()
+	MythicLootGlobalDB = MythicLootGlobalDB or {}
+	local dump = {}
+	for _, slotKey in ipairs({
+		"Head", "Neck", "Shoulder", "Cloak", "Chest", "Wrist", "Hand", "Waist",
+		"Legs", "Feet", "MainHand", "OffHand", "Finger", "Trinket",
+	}) do
+		for _, name in ipairs(SLOT_INV[slotKey]) do
+			local link = GetInventoryItemLink("player", InvID(name))
+			if link then
+				local info = C_Item.GetItemUpgradeInfo(link)
+				local eff, _, base = C_Item.GetDetailedItemLevelInfo(link)
+				table.insert(dump, {
+					slot = name,
+					link = link,
+					itemString = link:match("|H(item[%-:%d]+)|h"),
+					trackString = info and info.trackString,
+					trackStringID = info and info.trackStringID,
+					currentLevel = info and info.currentLevel,
+					maxLevel = info and info.maxLevel,
+					effectiveILvl = eff,
+					baseILvl = base,
+				})
+			end
+		end
+	end
+	MythicLootGlobalDB.upgradeDump = dump
+	print("|cff33ff66MythicLoot|r: dumped " .. #dump
+		.. " equipped items to SavedVariables — /reload, then tell Claude.")
+end
+
 -- Diagnostic (/ml tracks): dump each equipped item's track so the live,
 -- locale-independent trackStringID values can be verified against TRACK_ORDER.
 function MythicLoot.PrintGearTracks()

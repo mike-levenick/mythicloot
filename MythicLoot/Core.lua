@@ -57,6 +57,10 @@ SlashCmdList.MYTHICLOOT = function(msg)
 		MythicLoot.ExportLoot()
 		return
 	end
+	if cmd == "updump" and MythicLoot.DumpUpgrades then
+		MythicLoot.DumpUpgrades()
+		return
+	end
 	MythicLoot:ToggleWindow()
 end
 
