@@ -1408,6 +1408,9 @@ local function CreateToolbar()
 				-- both turns the lens on and sets which Voidcore pool to view. The
 				-- Voidcore Track persists, so the always-on Claimed marks use it too.
 				local sub = rootDescription:CreateButton(f.label)
+				-- Voidcore tracks are the full ladder (TRACK_ORDER), independent of the
+				-- "Help me reach" TARGET_TRACKS (which drops Explorer): a Voidcore can
+				-- roll at any Gear Track, unrelated to the season ilvl bonus table.
 				for _, track in ipairs(MythicLoot.TRACK_ORDER) do
 					sub:CreateRadio(track,
 						function()
