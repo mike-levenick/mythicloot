@@ -1,6 +1,10 @@
 -- Generates MythicLoot/Data/SeasonLoot.lua from an exported SavedVariables file.
 -- Usage: lua gen_seasonloot.lua <savedvars.lua> <out.lua>
 local svPath, outPath = arg[1], arg[2]
+if not (svPath and outPath) then
+  io.stderr:write("usage: lua gen_seasonloot.lua <savedvars.lua> <out.lua>\n")
+  os.exit(1)
+end
 
 -- Load the SavedVariables (sets the global MythicLootGlobalDB).
 local chunk = assert(loadfile(svPath))

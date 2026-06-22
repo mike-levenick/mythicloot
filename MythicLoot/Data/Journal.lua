@@ -1,9 +1,11 @@
 local ADDON_NAME, MythicLoot = ...
 
--- Loads the Season Rotation and per-spec loot from the game's Encounter
--- Journal at runtime (ADR 0002). All reads are async-tolerant: loot info
--- arrives over EJ_LOOT_DATA_RECIEVED (Blizzard's spelling) and we re-read
--- until every item resolves, then cache for the session.
+-- Serves per-spec dungeon loot to the addon. The Season Rotation (dungeon list)
+-- is fetched at runtime from C_ChallengeMode, but loot now comes from the shipped
+-- SeasonLoot bundle (ADR 0009) — GetDungeonData reads that, no Encounter Journal
+-- on the normal path. The live EJ reader below (RequestLiveLoot/GetLiveDungeonData
+-- and the EJ_LOOT_DATA_RECIEVED machinery) is retained only for /ml export, which
+-- regenerates the bundle; it is the addon's sole remaining EJ reader.
 
 local Journal = CreateFrame("Frame")
 MythicLoot.Journal = Journal

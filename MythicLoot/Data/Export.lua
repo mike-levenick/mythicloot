@@ -1,10 +1,10 @@
 local ADDON_NAME, MythicLoot = ...
 
--- Loot-data exporter (ADR 0009). Walks the Encounter Journal reader we already
--- have across every class/spec × every rotation dungeon and dumps the result into
--- a SavedVariable, which WoW serialises to disk as a ready-made Lua table. That
--- file is then hand-copied into the shipped Data/SeasonLoot.lua so the addon can
--- read loot from the bundle instead of the live EJ.
+-- Loot-data exporter (ADR 0009). Walks the live Encounter Journal reader across
+-- every class/spec × every rotation dungeon and dumps the result into a
+-- SavedVariable, which WoW serialises to disk. tools/gen_seasonloot.lua then turns
+-- that into the shipped Data/SeasonLoot.lua (deterministic, sorted), which the
+-- addon reads instead of the live EJ.
 --
 -- This is the only thing that reads the EJ at runtime; it is a maintenance tool,
 -- run once per season/patch. The harvest is clean-room: the data comes from
@@ -85,8 +85,9 @@ local function Run()
 			}
 			running = false
 			p("|cff33ff66done|r — " .. #jobs .. " specs harvested.")
-			p("Now: /reload (or log out), then copy MythicLootGlobalDB.seasonLoot from "
-				.. "your SavedVariables/MythicLoot.lua and send it over.")
+			p("Now: /reload (or log out) to flush SavedVariables, then run "
+				.. "tools/gen_seasonloot.lua over SavedVariables/MythicLoot.lua to "
+				.. "regenerate Data/SeasonLoot.lua.")
 			return
 		end
 		local job = jobs[n]
