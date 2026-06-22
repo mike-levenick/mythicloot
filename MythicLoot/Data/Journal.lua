@@ -12,7 +12,7 @@ local MYTHIC_DUNGEON_DIFFICULTY = 23
 local MAX_RETRIES_PER_DUNGEON = 25
 local RETRY_INTERVAL = 0.3
 
-local rotation       -- array of {challengeMapID, name, icon, journalInstanceID, tier}
+local rotation       -- array of {challengeMapID, name, icon}; journalInstanceID/tier added lazily (exporter only)
 local instanceByName -- EJ dungeon name -> journalInstanceID, all expansions
 local instanceTier   -- journalInstanceID -> EJ tier index it lives in
 local cache = {}     -- "classID-specID" -> {byMap = {challengeMapID -> {items, slotSet}}, complete, loading}
@@ -81,8 +81,24 @@ local function FindJournalInstance(challengeMapName)
 	end
 end
 
+-- Lazily resolve a rotation entry's EJ instance + tier. Only the exporter's live
+-- reads need these, so the normal runtime (which reads the shipped bundle) never
+-- touches the Encounter Journal — we resolve on demand the first time /ml export
+-- reads a dungeon's loot (ADR 0009). FindJournalInstance may return nil (no match);
+-- journalChecked records that we tried so we don't rescan every read.
+local function EnsureJournalInfo(dungeon)
+	if dungeon.journalChecked then return end
+	dungeon.journalChecked = true
+	BuildInstanceIndex()
+	local jid = FindJournalInstance(dungeon.name)
+	dungeon.journalInstanceID = jid
+	dungeon.tier = jid and instanceTier[jid]
+end
+
 -- Returns the Season Rotation, or nil if the server hasn't sent the map
--- list yet (a request is issued; CHALLENGE_MODE_MAPS_UPDATE follows).
+-- list yet (a request is issued; CHALLENGE_MODE_MAPS_UPDATE follows). Built purely
+-- from C_ChallengeMode — no EJ read; the journal instance/tier are filled in lazily
+-- (see EnsureJournalInfo) only when the exporter needs them.
 function Journal:GetRotation()
 	if rotation then return rotation end
 	local mapIDs = C_ChallengeMode.GetMapTable()
@@ -90,38 +106,17 @@ function Journal:GetRotation()
 		C_MythicPlus.RequestMapInfo()
 		return nil
 	end
-	BuildInstanceIndex()
 	rotation = {}
 	for _, mapID in ipairs(mapIDs) do
 		local name, _, _, texture = C_ChallengeMode.GetMapUIInfo(mapID)
 		if name then
-			local jid = FindJournalInstance(name)
 			table.insert(rotation, {
 				challengeMapID = mapID,
 				name = name,
 				icon = texture,
-				journalInstanceID = jid,
-				tier = jid and instanceTier[jid],
 			})
 		end
 	end
-	-- Diagnostic: distinct dungeons must map to distinct journal instances. If
-	-- they don't, loot would be identical across rows for a different reason
-	-- than the stale-read race; surface it so we know which bug we're chasing.
-	local seenInstance = {}
-	for _, dungeon in ipairs(rotation) do
-		local id = dungeon.journalInstanceID
-		if id then
-			if seenInstance[id] then
-				print("|cffff8000MythicLoot:|r '" .. dungeon.name
-					.. "' resolved to the same journal instance as '" .. seenInstance[id]
-					.. "' — loot mapping is wrong, please report.")
-			else
-				seenInstance[id] = dungeon.name
-			end
-		end
-	end
-
 	return rotation
 end
 
@@ -171,6 +166,7 @@ function NextDungeon()
 		FinishRequest()
 		return
 	end
+	EnsureJournalInfo(dungeon) -- resolve EJ instance/tier on demand (exporter path)
 	if not dungeon.journalInstanceID then
 		-- No EJ match (shouldn't happen for standard rotations); show an empty row rather than wedge the queue.
 		request.entry.byMap[dungeon.challengeMapID] = { items = {}, slotSet = {}, missing = true }
