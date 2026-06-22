@@ -306,11 +306,15 @@ local function BuildSpec(classID, specID)
 		local items, slotSet = {}, {}
 		for _, r in ipairs(rows) do
 			local slot = MythicLoot.GetSlotByKey(r.slot)
+			-- A minimal but real item hyperlink so every consumer works without UI
+			-- changes: tooltip (SetHyperlink), Stat Tier (GetItemStats), the Drop
+			-- Picker label, and a clickable chat insert. Colourless (we don't ship
+			-- quality); the game fills the rest in from the itemID.
 			items[#items + 1] = {
 				itemID = r.id,
 				name = r.name,
 				icon = r.icon,
-				link = "item:" .. r.id,
+				link = "|cffffffff|Hitem:" .. r.id .. "|h[" .. (r.name or ("item:" .. r.id)) .. "]|h|r",
 				slotKey = r.slot,
 				slotOrder = slot and slot.order,
 			}
