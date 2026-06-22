@@ -38,29 +38,39 @@ end)
 
 SLASH_MYTHICLOOT1 = "/mythicloot"
 SLASH_MYTHICLOOT2 = "/ml"
+
+-- Diagnostic/data-gathering commands, only active in dev mode (see /ml dev-mode).
+local DEV_COMMANDS = { tracks = true, stats = true, export = true, updump = true }
+
 SlashCmdList.MYTHICLOOT = function(msg)
-	-- First word is the command; the rest is its argument (voidcheck takes one).
-	local cmd, arg = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
-	if cmd == "tracks" and MythicLoot.PrintGearTracks then
-		MythicLoot.PrintGearTracks()
+	local cmd = (msg or ""):lower():match("^%s*(%S*)")
+
+	-- Undocumented dev toggle. The data-gathering/diagnostic commands below are used
+	-- to regenerate the shipped data each season; they're hidden from normal users
+	-- and only respond once dev mode is on. The flag persists account-wide.
+	if cmd == "dev-mode" or cmd == "dev" then
+		MythicLootGlobalDB = MythicLootGlobalDB or {}
+		MythicLootGlobalDB.devMode = not MythicLootGlobalDB.devMode
+		if MythicLootGlobalDB.devMode then
+			print("|cff33ff66MythicLoot|r dev mode |cff33ff66ON|r — /ml tracks · stats · export · updump")
+		else
+			print("|cff33ff66MythicLoot|r dev mode |cffff4444OFF|r")
+		end
 		return
 	end
-	if cmd == "stats" and MythicLoot.PrintGearStats then
-		MythicLoot.PrintGearStats()
+
+	-- Dev/diagnostic commands: always "handled" (they never fall through to opening
+	-- the window), but they only act when dev mode is on — otherwise a silent no-op.
+	if DEV_COMMANDS[cmd] then
+		if MythicLootGlobalDB and MythicLootGlobalDB.devMode then
+			if cmd == "tracks" then MythicLoot.PrintGearTracks() end
+			if cmd == "stats" then MythicLoot.PrintGearStats() end
+			if cmd == "export" then MythicLoot.ExportLoot() end
+			if cmd == "updump" then MythicLoot.DumpUpgrades() end
+		end
 		return
 	end
-	if cmd == "voidcheck" and MythicLoot.VoidCheck then
-		MythicLoot.VoidCheck(arg)
-		return
-	end
-	if cmd == "export" and MythicLoot.ExportLoot then
-		MythicLoot.ExportLoot()
-		return
-	end
-	if cmd == "updump" and MythicLoot.DumpUpgrades then
-		MythicLoot.DumpUpgrades()
-		return
-	end
+
 	MythicLoot:ToggleWindow()
 end
 

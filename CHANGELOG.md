@@ -6,6 +6,8 @@
 
 - **Voidforge tracking** — mark which items you've already won from a Voidcore bonus roll, per dungeon and per Gear Track, and the new "Voidforge (what's left)" filter lights only the dungeons where a Voidcore can still win you something. A green check marks claimed drops in every view. Mark a drop via shift+right-click, or tick "Won at <track>" in the Drop Picker; pick the track your keys roll at from the filter's submenu (defaults to Myth). Saved per character, shown only while viewing your own spec. (ADR 0008)
 
+- **Loot shown at your target track** — drops now display their item level at the Gear Track you're aiming for: Myth 1/6 by default, or whatever you pick in "Help me reach". Hover a drop and the item level reflects what you'd actually get.
+
 ### Changed
 
 - **Loot data is now built in** — the dungeon loot tables ship with the addon instead of being read from the game each session. Opens are instant, the data is identical everywhere (including inside a dungeon, where the game journal used to show every dungeon the same), and there's no more loading flicker. (ADR 0009, supersedes the runtime cache from ADR 0007)

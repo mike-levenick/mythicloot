@@ -63,5 +63,9 @@ touches it, and it's a maintenance tool, not a player path.
 - **The exporter is the last EJ reader.** It must run out-of-dungeon (it guards on
   `IsInInstance()`), and the season rotation must be loaded first.
 - **Risk: a missing spec/dungeon in the bundle** (new dungeon, export gap) shows an
-  empty row rather than wrong data; acceptable and visible. Keep `Data/VoidCheck.lua`
-  and the exporter shipped so regeneration is always to hand.
+  empty row rather than wrong data; acceptable and visible. The regeneration tools
+  (`/ml export`, `/ml updump`, `tools/gen_seasonloot.lua`) ship with the addon but
+  are gated behind an undocumented `/ml dev-mode` toggle, so they're to hand each
+  season without exposing them to normal users. (`Data/VoidCheck.lua` — the Voidforge
+  auto-detect diagnostic from [[0008]] — was removed; it's unrelated to loot
+  regeneration and that feature isn't shipped yet.)
