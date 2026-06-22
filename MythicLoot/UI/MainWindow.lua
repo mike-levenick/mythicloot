@@ -1338,7 +1338,7 @@ local function CreateToolbar()
 		rootDescription:CreateRadio("—",
 			function() return activeFloor == nil end,
 			function() ClearActiveFloor() end)
-		for _, track in ipairs(MythicLoot.TRACK_ORDER) do
+		for _, track in ipairs(MythicLoot.TARGET_TRACKS) do
 			rootDescription:CreateRadio(track,
 				function() return activeFloor == track end,
 				function()
