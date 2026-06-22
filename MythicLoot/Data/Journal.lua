@@ -296,6 +296,19 @@ end
 -- bundle is static). A "item:<id>" itemString stands in for the full link — enough
 -- for the tooltip, the Stat Tier read (C_Item.GetItemStats), and a chat insert.
 local builtBySpec = {}
+local displayTrackBonus -- the upgrade-track bonus the bundled links are built at
+
+-- Choose the Gear Track the bundled loot's item levels display at. The UI ties this
+-- to "Help me reach" (default Myth, see ADR 0009). Rebuilds the cached links when it
+-- changes, so the tooltips update live.
+function Journal:SetDisplayTrack(trackName)
+	local bonus = MythicLoot.SeasonTrackBonus
+		and (MythicLoot.SeasonTrackBonus[trackName] or MythicLoot.SeasonTrackBonus.Myth)
+	if bonus ~= displayTrackBonus then
+		displayTrackBonus = bonus
+		wipe(builtBySpec)
+	end
+end
 
 local function BuildSpec(classID, specID)
 	local byMap = {}
@@ -306,15 +319,15 @@ local function BuildSpec(classID, specID)
 		local items, slotSet = {}, {}
 		for _, r in ipairs(rows) do
 			local slot = MythicLoot.GetSlotByKey(r.slot)
-			-- A minimal but real item hyperlink so every consumer works without UI
-			-- changes: tooltip (SetHyperlink), Stat Tier (GetItemStats), the Drop
-			-- Picker label, and a clickable chat insert. Colourless (we don't ship
-			-- quality); the game fills the rest in from the itemID.
+			-- A real item hyperlink built at the display Track, so the tooltip shows
+			-- the right item level (e.g. Myth 1/6) and every other consumer works too:
+			-- Stat Tier (GetItemStats), the Drop Picker label, and a clickable chat
+			-- insert. Colourless (we don't ship quality).
 			items[#items + 1] = {
 				itemID = r.id,
 				name = r.name,
 				icon = r.icon,
-				link = "|cffffffff|Hitem:" .. r.id .. "|h[" .. (r.name or ("item:" .. r.id)) .. "]|h|r",
+				link = MythicLoot.BuildItemLink(r.id, r.name, displayTrackBonus),
 				slotKey = r.slot,
 				slotOrder = slot and slot.order,
 			}

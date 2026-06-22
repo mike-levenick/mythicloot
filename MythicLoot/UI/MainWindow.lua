@@ -1184,6 +1184,12 @@ function Render()
 	UpdateHeaders(columns, numCols, checkedSet, filtered)
 	UpdateColumnHighlights(columns, numCols, checkedSet, filtered)
 
+	-- Show loot item levels at the "Help me reach" track (default Myth 1/6 when the
+	-- dropdown is blank). The Journal rebuilds its links if this changed.
+	if MythicLoot.Journal.SetDisplayTrack then
+		MythicLoot.Journal:SetDisplayTrack(activeFloor or "Myth")
+	end
+
 	local classID, specID = GetSpecSelection()
 	local data = MythicLoot.Journal:GetDungeonData(classID, specID)
 	if not data then

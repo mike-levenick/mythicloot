@@ -18,6 +18,27 @@ end
 MythicLoot.TRACK_ORDER = TRACK_ORDER
 MythicLoot.DEFAULT_TRACK_FLOOR = "Hero"
 
+-- Upgrade-track bonus IDs for this season's gear, level 1 of each track. Appending
+-- one to an item link makes the game render that track's item level, so bundled
+-- loot can be shown at e.g. Myth 1/6 (ADR 0009). Derived from equipped-gear links
+-- via /ml updump (Midnight S1, build 120007): Champion (12785), Hero (12793), and
+-- Myth (12801) observed directly — level N is base+(N-1), tracks are +8 apart — and
+-- the lower three extrapolated from that spacing. Re-derive if a patch shifts them.
+MythicLoot.SeasonTrackBonus = {
+	Explorer = 12761, Adventurer = 12769, Veteran = 12777,
+	Champion = 12785, Hero = 12793, Myth = 12801,
+}
+
+-- Build a colourless item hyperlink for a bundled drop. With a trackBonus, the
+-- game shows that upgrade track's item level; without one, the base item level.
+-- The colons pad the itemString to the itemContext(35)+single-bonus position.
+function MythicLoot.BuildItemLink(id, name, trackBonus)
+	local itemString = trackBonus
+		and ("item:" .. id .. string.rep(":", 11) .. "35:1:" .. trackBonus)
+		or ("item:" .. id)
+	return "|cffffffff|H" .. itemString .. "|h[" .. (name or ("item:" .. id)) .. "]|h|r"
+end
+
 -- Slot (grid column) key -> the character-sheet inventory slot name(s) it covers.
 -- Finger and Trinket each cover two equipped items; "Other" has no Gear Track
 -- and is omitted entirely.
