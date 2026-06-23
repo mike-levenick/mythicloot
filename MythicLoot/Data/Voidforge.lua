@@ -233,7 +233,12 @@ local function ReconcileFromTooltip()
 	local marked, cleared = 0, 0
 	for _, it in ipairs(pool) do
 		if it.name and it.itemID then
-			if listed[it.name] then
+			if it.slotKey == "Other" then
+				-- Voidforge only transmutes equippable gear, so "Other" items (crates,
+				-- tokens, etc.) are never rollable — their absence from the list means
+				-- "not eligible", NOT "won". Never claim them; clear any stale mark.
+				MythicLoot.SetClaim(mapID, track, it.itemID, false)
+			elseif listed[it.name] then
 				if MythicLoot.SetClaim(mapID, track, it.itemID, false) then cleared = cleared + 1 end
 			else
 				if MythicLoot.SetClaim(mapID, track, it.itemID, true) then marked = marked + 1 end
@@ -245,7 +250,7 @@ local function ReconcileFromTooltip()
 	if marked > 0 or cleared > 0 then
 		MythicLoot.RefreshWindow()
 		p("Synced " .. DungeonName(mapID) .. " (" .. track .. ") from the roll — "
-			.. marked .. " won, " .. cleared .. " still available.")
+			.. marked .. " marked won, " .. cleared .. " un-marked.")
 	end
 	return true
 end

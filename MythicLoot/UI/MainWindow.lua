@@ -942,9 +942,12 @@ local function ResolveCell(items, slot, mapID, statPriority, statActive, filter,
 		-- The Cell passes while any Drop here is still unclaimed at the Voidcore
 		-- Track; show the first such Drop (or a pinned one if it's still rollable),
 		-- so the lit cells read as "where a Voidcore can still win me something".
+		-- "Other" items (crates/tokens) aren't transmutable, so they never count.
 		local avail
-		for _, it in ipairs(items) do
-			if not claimedNow(it.itemID) then avail = it break end
+		if slot.key ~= "Other" then
+			for _, it in ipairs(items) do
+				if not claimedNow(it.itemID) then avail = it break end
+			end
 		end
 		passes = avail ~= nil
 		if pinDrop and not claimedNow(pinDrop.itemID) then
@@ -1093,10 +1096,15 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 	local voidTrack = GetVoidcoreTrack()
 	local poolExhausted = false
 	if ownSpec then
+		-- Only transmutable gear is in the Voidforge Pool — "Other" items (crates,
+		-- tokens) never are, so they must not count toward exhaustion or they'd keep
+		-- a pool from ever reading as fully won.
 		local total, claimed = 0, 0
 		for _, item in ipairs(loot.items) do
-			total = total + 1
-			if IsClaimed(mapID, voidTrack, item.itemID) then claimed = claimed + 1 end
+			if item.slotKey ~= "Other" then
+				total = total + 1
+				if IsClaimed(mapID, voidTrack, item.itemID) then claimed = claimed + 1 end
+			end
 		end
 		if total > 0 and claimed == total then
 			-- The game reopens a Pool the instant its last item is won, so a fully
@@ -1106,7 +1114,9 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 			-- making the pool look exhausted again (ADR 0008 reset rule).
 			local claims = GetClaims()
 			for _, item in ipairs(loot.items) do
-				claims[ClaimKey(mapID, voidTrack, item.itemID)] = nil
+				if item.slotKey ~= "Other" then
+					claims[ClaimKey(mapID, voidTrack, item.itemID)] = nil
+				end
 			end
 			poolExhausted = true
 		end
