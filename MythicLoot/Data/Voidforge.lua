@@ -30,6 +30,13 @@ local function p(...)
 	print("|cff8000ffMythicLoot|r:", ...)
 end
 
+-- TEMPORARY debug tracing (remove before release): confirms the file loaded, the
+-- roll events fire, and where detection resolves or bails.
+local DEBUG = true
+local function dbg(...)
+	if DEBUG then print("|cffff8000ML-dbg|r:", ...) end
+end
+
 local function ActiveChallengeMap()
 	return C_ChallengeMode and C_ChallengeMode.GetActiveChallengeMapID
 		and C_ChallengeMode.GetActiveChallengeMapID()
@@ -80,11 +87,14 @@ end
 -- at the event because pendingMapID is cleared right after.
 local function TryRecord(rewardLink, itemID, classID, specID, mapAtRoll, attempt)
 	local track = MythicLoot.GetItemTrackName(rewardLink)
+	dbg("TryRecord attempt", attempt, "itemID", itemID, "track", tostring(track), "mapAtRoll", tostring(mapAtRoll))
 	if not track then
 		if attempt < 5 then
 			C_Timer.After(0.5, function()
 				TryRecord(rewardLink, itemID, classID, specID, mapAtRoll, attempt + 1)
 			end)
+		else
+			dbg("  gave up: no Track on the won item link after retries")
 		end
 		-- Out of retries: no track means we can't place it in a Voidcore pool; the
 		-- player can still mark it by hand. Stay quiet rather than guess.
@@ -94,8 +104,9 @@ local function TryRecord(rewardLink, itemID, classID, specID, mapAtRoll, attempt
 	local mapID = mapAtRoll
 	if not InRotation(mapID) then
 		mapID = DungeonByItem(itemID, classID, specID)
+		dbg("  mapAtRoll not in rotation; DungeonByItem ->", tostring(mapID), "(classID", classID, "specID", specID .. ")")
 	end
-	if not mapID then return end -- can't place it; manual marking still covers it
+	if not mapID then dbg("  gave up: couldn't resolve dungeon") return end
 
 	-- Key the Claim on the item's OWN Track (what it was won at), not the grid's
 	-- viewing Track. They coincide in the normal case — you view the Voidcore Track
@@ -108,11 +119,12 @@ local function TryRecord(rewardLink, itemID, classID, specID, mapAtRoll, attempt
 end
 
 local function OnRollResult(rewardType, rewardLink, quantity, specID)
+	dbg("OnRollResult type=", tostring(rewardType), "link=", tostring(rewardLink), "specID=", tostring(specID))
 	-- Only item rewards are Claims; gold/currency rolls (if any) aren't.
-	if rewardType ~= "item" or not rewardLink then return end
+	if rewardType ~= "item" or not rewardLink then dbg("  ignored: not an item reward") return end
 
 	local itemID = tonumber(rewardLink:match("item:(%d+)"))
-	if not itemID then return end
+	if not itemID then dbg("  ignored: no itemID in link") return end
 
 	-- The event tells us which spec the roll was for; pair it with the player's
 	-- class (constant). Fall back to the live loot spec if the event omitted it.
@@ -242,6 +254,8 @@ end
 -- the popup stays up.
 local function OnTooltipShow()
 	if not (BonusRollFrame and BonusRollFrame:IsShown()) then return end
+	dbg("tooltip OnShow while BonusRollFrame is up; first line:",
+		tostring(_G.GameTooltipTextLeft1 and _G.GameTooltipTextLeft1:GetText()))
 	local function attempt(n)
 		if not (BonusRollFrame and BonusRollFrame:IsShown()) then return end
 		if ReconcileFromTooltip() then return end
@@ -270,13 +284,17 @@ local f = CreateFrame("Frame")
 f:RegisterEvent("BONUS_ROLL_STARTED")
 f:RegisterEvent("BONUS_ROLL_RESULT")
 f:SetScript("OnEvent", function(_, event, ...)
+	dbg("EVENT", event)
 	if event == "BONUS_ROLL_STARTED" then
 		-- Capture the dungeon now, while we're still in/just-finished the instance;
 		-- by the time the result fires the player may have started to leave. (Loot is
 		-- bundled now, so there's nothing to pre-warm — it's always available.)
 		pendingMapID = CurrentDungeonMapID()
+		dbg("  pendingMapID =", tostring(pendingMapID), "| instance:", tostring((GetInstanceInfo())))
 	elseif event == "BONUS_ROLL_RESULT" then
 		OnRollResult(...)
 		pendingMapID = nil
 	end
 end)
+
+dbg("Voidforge auto-detect loaded — listening for BONUS_ROLL_STARTED/RESULT + roll-popup tooltips.")
