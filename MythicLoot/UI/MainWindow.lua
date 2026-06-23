@@ -247,6 +247,36 @@ local function ToggleClaim(mapID, track, itemID)
 	Render()
 end
 
+-- Claim seams for the auto-detect module (Data/Voidforge.lua), so it can record
+-- wins / reconcile without reaching into these UI locals. SavedVariables exist by
+-- the time any roll fires, so the lazy GetClaims init is safe here.
+
+-- Set (or clear) a Claim to an explicit value. Returns true if it changed, so a
+-- batch reconcile can refresh once and report a real count. Does NOT re-render —
+-- the caller decides when (use RefreshWindow), keeping batch updates cheap.
+function MythicLoot.SetClaim(mapID, track, itemID, claimed)
+	if not (mapID and track and itemID) then return false end
+	local claims = GetClaims()
+	local k = ClaimKey(mapID, track, itemID)
+	local cur = claims[k] == true
+	local want = claimed and true or false
+	if cur == want then return false end
+	claims[k] = want or nil
+	return true
+end
+
+-- Re-render the grid if it's open. Safe to call when the window was never created.
+function MythicLoot.RefreshWindow()
+	if window and window:IsShown() then Render() end
+end
+
+-- Record a single Voidforge win (the BONUS_ROLL_RESULT path); refreshes if open.
+function MythicLoot.MarkClaim(mapID, track, itemID)
+	if MythicLoot.SetClaim(mapID, track, itemID, true) then
+		MythicLoot.RefreshWindow()
+	end
+end
+
 -- The Gear Track whose Voidforge pool the grid currently shows (a viewing choice,
 -- persisted per character; default Myth). Separate from the Track Floor — see
 -- CONTEXT.md: Voidcore Track.
