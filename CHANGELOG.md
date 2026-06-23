@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Voidforge auto-detect** — when you spend a Voidcore, the item you win is marked claimed automatically, with a chat confirmation. Mousing over the roll popup also syncs that dungeon's whole pool from what's still rollable, so your "what's left" self-corrects as you roll — no manual marking needed. (ADR 0008)
+
 ## v1.2.0 — 2026-06-21
 
 ### Added

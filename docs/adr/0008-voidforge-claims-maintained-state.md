@@ -54,8 +54,9 @@ on the Voidcache returns a *generic* tooltip (different item level, no Track, no
 "Contains" list), so there is **no anytime/retroactive scrape** — we snapshot
 going-forward as the player rolls, and fall back to manual for the rest.
 
-Manual marking ships as the guaranteed core; the popup snapshot + event auto-detect
-is enabled once the popup frame can be read programmatically (see below).
+Manual marking shipped first as the guaranteed core (v1.2.0); the event + popup
+snapshot auto-detect followed once the roll events were decoded in-game (see
+"Auto-detect implemented" below).
 
 ## Consequences
 
@@ -83,8 +84,37 @@ is enabled once the popup frame can be read programmatically (see below).
   read has it; poll-until-stable is required.
 - **By-ID is generic** — `GetItemByID(voidcacheItemID)` lacks the Track and the
   "Contains" list, so only the live popup instance is usable.
-- **Open question for the build:** read the popup's reward item **programmatically**
-  (hook the roll frame, pull its item link, feed `C_TooltipInfo.GetHyperlink`) so the
-  snapshot needs no manual hover. The frame's identity is the remaining spike.
 - Claims bind to the player's real **Loot Spec**; the Voidforge lens is unavailable
   while the Spec Selection points at another spec (CONTEXT.md: Loot Filter).
+
+## Auto-detect implemented (`Data/Voidforge.lua`)
+
+The Voidforge roll reuses the classic bonus-roll frame/events, so detection rides
+two paths (verified in-game):
+
+- **Event (the win):** `BONUS_ROLL_STARTED` (popup opens) → `BONUS_ROLL_RESULT`
+  (the win). Everything a Claim needs comes off the **won item itself** — itemID +
+  link from the reward arg, Track from its own `C_Item.GetItemUpgradeInfo()`
+  (validated against the English ladder), dungeon from `GetInstanceInfo()` (the
+  instance you're rolling in, captured at `STARTED`). No tooltip parsing; this is
+  the authoritative path for new wins.
+- **Snapshot (retroactive reconcile):** hooking `GameTooltip` while
+  `BonusRollFrame` is shown, we read the reward tooltip's
+  `Contains one of the following items:` list. **Won items are *removed* from that
+  list** (not dimmed), so `claimed = (loot-spec pool) − (still-listed)`: mark the
+  absent items, clear the listed ones, in one pass. This back-fills wins the event
+  missed and corrects stale marks.
+
+Two corrections the build settled:
+
+- **The popup is read on the player's mouseover, not via a programmatic frame
+  read** — the earlier "open question" spike was unnecessary; the player hovers the
+  popup anyway, so hooking the tooltip is enough.
+- **`"Other"` items are excluded.** Voidforge only transmutes equippable gear, so
+  crates/tokens (slot `"Other"`) are in the loot table but never in the rollable
+  list — their absence means "not eligible", not "won". They're skipped by the
+  snapshot, the lens, and the exhaustion count.
+
+The snapshot trusts the shipped loot-spec pool (ADR 0009) to equal the Voidforge
+pool. For equippable items this holds (the journal is spec-filtered to the same
+gear); `"Other"` was the one real divergence, now handled.
