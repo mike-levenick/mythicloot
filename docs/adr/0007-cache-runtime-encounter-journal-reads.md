@@ -4,9 +4,10 @@ Date: 2026-06-16
 
 ## Status
 
-Accepted
-
-Complements [[0002]] (runtime Encounter Journal data).
+**Superseded by [[0009]]** (2026-06-21). With loot now shipped, there are no
+runtime EJ reads to cache; the seed-then-paint idea lives on as "seed from the
+bundle." Originally complemented [[0002]] (runtime Encounter Journal data), itself
+superseded by [[0009]].
 
 ## Context
 
