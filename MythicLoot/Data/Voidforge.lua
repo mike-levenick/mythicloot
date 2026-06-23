@@ -103,8 +103,8 @@ local function TryRecord(rewardLink, itemID, classID, specID, mapAtRoll, attempt
 	-- Voidcore Track matches, which is correct: removal is per-Track. The chat line
 	-- names the Track so the player knows which view shows it.
 	MythicLoot.MarkClaim(mapID, track, itemID)
-	p("Voidforge win recorded — " .. rewardLink .. " at " .. track
-		.. " in " .. DungeonName(mapID) .. ". It's now marked as claimed.")
+	p(rewardLink .. " |cff8080ff— marked won (you just rolled it)|r — "
+		.. track .. ", " .. DungeonName(mapID) .. ".")
 end
 
 local function OnRollResult(rewardType, rewardLink, quantity, specID)
@@ -230,7 +230,7 @@ local function ReconcileFromTooltip()
 	end
 
 	reconciling = true
-	local marked, cleared = 0, 0
+	local won, freed = {}, {} -- item displays that changed, for the report below
 	for _, it in ipairs(pool) do
 		if it.name and it.itemID then
 			if it.slotKey == "Other" then
@@ -239,18 +239,29 @@ local function ReconcileFromTooltip()
 				-- "not eligible", NOT "won". Never claim them; clear any stale mark.
 				MythicLoot.SetClaim(mapID, track, it.itemID, false)
 			elseif listed[it.name] then
-				if MythicLoot.SetClaim(mapID, track, it.itemID, false) then cleared = cleared + 1 end
+				if MythicLoot.SetClaim(mapID, track, it.itemID, false) then
+					table.insert(freed, it.link or it.name)
+				end
 			else
-				if MythicLoot.SetClaim(mapID, track, it.itemID, true) then marked = marked + 1 end
+				if MythicLoot.SetClaim(mapID, track, it.itemID, true) then
+					table.insert(won, it.link or it.name)
+				end
 			end
 		end
 	end
 	reconciling = false
 
-	if marked > 0 or cleared > 0 then
+	-- Per-item report so it's clear what changed and why (the Voidcache popup, vs the
+	-- BONUS_ROLL_RESULT path which prints "you rolled it" separately).
+	if #won > 0 or #freed > 0 then
 		MythicLoot.RefreshWindow()
-		p("Synced " .. DungeonName(mapID) .. " (" .. track .. ") from the roll — "
-			.. marked .. " marked won, " .. cleared .. " unmarked.")
+		p("synced " .. DungeonName(mapID) .. " (" .. track .. ") from the Voidcache popup:")
+		for _, disp in ipairs(won) do
+			print("   " .. disp .. " |cff8080ff— marked won (no longer offered)|r")
+		end
+		for _, disp in ipairs(freed) do
+			print("   " .. disp .. " |cff8080ff— back to available (still offered)|r")
+		end
 	end
 	return true
 end
