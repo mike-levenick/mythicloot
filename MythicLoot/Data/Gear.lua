@@ -82,8 +82,8 @@ end
 
 -- The Gear Track name of an item link (e.g. "Myth"), or nil when it has no upgrade
 -- track. Used by Voidforge auto-detect to read the Track a won bonus-roll item was
--- awarded at, straight off the item. We return the name ONLY when it's one our
--- ladder recognizes: trackString is localized, and the rest of the addon keys
+-- awarded at, straight off the item. We return the name ONLY when it's one that
+-- our ladder recognizes: trackString is localized, and the rest of the addon keys
 -- Claims on the English TRACK_ORDER names (ADR 0004). On a non-English client the
 -- localized name won't match, so this no-ops instead of writing a dead claim key.
 function MythicLoot.GetItemTrackName(itemLink)

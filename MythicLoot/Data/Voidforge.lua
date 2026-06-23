@@ -104,7 +104,7 @@ local function TryRecord(rewardLink, itemID, classID, specID, mapAtRoll, attempt
 	-- names the Track so the player knows which view shows it.
 	MythicLoot.MarkClaim(mapID, track, itemID)
 	p("Voidforge win recorded — " .. rewardLink .. " at " .. track
-		.. " in " .. DungeonName(mapID) .. ". It's now marked claimed.")
+		.. " in " .. DungeonName(mapID) .. ". It's now marked as claimed.")
 end
 
 local function OnRollResult(rewardType, rewardLink, quantity, specID)
@@ -217,6 +217,18 @@ local function ReconcileFromTooltip()
 		return true
 	end
 
+	-- Safety net for the name-based match: every still-listed item must be a known
+	-- pool item by name. If one isn't, our names have drifted from the live tooltip
+	-- (or the bundle pool differs from Voidforge's) — bail rather than risk marking a
+	-- genuinely-remaining item as won. The event path + manual marking still cover it.
+	local poolNames = {}
+	for _, it in ipairs(pool) do
+		if it.name then poolNames[it.name] = true end
+	end
+	for name in pairs(listed) do
+		if not poolNames[name] then return true end
+	end
+
 	reconciling = true
 	local marked, cleared = 0, 0
 	for _, it in ipairs(pool) do
@@ -238,7 +250,7 @@ local function ReconcileFromTooltip()
 	if marked > 0 or cleared > 0 then
 		MythicLoot.RefreshWindow()
 		p("Synced " .. DungeonName(mapID) .. " (" .. track .. ") from the roll — "
-			.. marked .. " marked won, " .. cleared .. " un-marked.")
+			.. marked .. " marked won, " .. cleared .. " unmarked.")
 	end
 	return true
 end
