@@ -23,6 +23,8 @@ After that, `/reload` picks up code changes.
 - `/ml` or `/mythicloot` (also in the minimap Addon Compartment)
 - Spec dropdown: any class/spec; **My Spec** / **Loot Spec** buttons to jump back
 - Slot dropdown: toggle any number of slots; "All Slots" clears
+- **Voidforge (what's left)** filter tracks which items you've won from Voidcore
+  bonus rolls — wins mark themselves, and the roll popup syncs the rest
 - Shift-click an item to link it in chat
 
 ## Docs
@@ -30,8 +32,11 @@ After that, `/reload` picks up code changes.
 - `CONTEXT.md` — glossary / ubiquitous language
 - `docs/adr/` — architecture decision records
 
-No shipped loot data: everything is read from the in-game Encounter Journal
-at runtime (`docs/adr/0002`), so a new season needs no addon update.
+Loot data ships with the addon (`Data/SeasonLoot.lua`), generated from the
+in-game Encounter Journal by a dev-only exporter (`/ml export`, gated behind
+`/ml dev-mode`). Opens are instant and the data is identical everywhere — see
+`docs/adr/0009`, which supersedes the original runtime-Journal approach
+(`docs/adr/0002`). Refreshing for a new season means re-running the exporter.
 
 ## License
 
