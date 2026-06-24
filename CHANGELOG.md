@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## v1.3.0 — 2026-06-23
 
 ### Added
 
 - **Voidforge auto-detect** — when you spend a Voidcore, the item you win is marked claimed automatically, with a chat confirmation. Mousing over the roll popup also syncs that dungeon's whole pool from what's still rollable, so your "what's left" self-corrects as you roll — no manual marking needed. (ADR 0008)
+
+### Fixed
+
+- **"Help me reach"** — choosing the blank "—" entry now clears the slots it seeded, returning to All Slots, instead of leaving the seeded slots selected.
 
 ## v1.2.0 — 2026-06-21
 
