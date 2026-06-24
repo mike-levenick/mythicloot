@@ -32,7 +32,7 @@ After that, `/reload` picks up code changes.
 - `CONTEXT.md` — glossary / ubiquitous language
 - `docs/adr/` — architecture decision records
 
-Loot data ships with the addon (`Data/SeasonLoot.lua`), generated from the
+Loot data ships with the addon (`MythicLoot/Data/SeasonLoot.lua`), generated from the
 in-game Encounter Journal by a dev-only exporter (`/ml export`, gated behind
 `/ml dev-mode`). Opens are instant and the data is identical everywhere — see
 `docs/adr/0009`, which supersedes the original runtime-Journal approach
