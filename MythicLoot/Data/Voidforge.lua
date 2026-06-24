@@ -150,15 +150,19 @@ local function MapIDByName(name)
 end
 
 -- The dungeon's loot-spec pool as {itemID, name} rows (the Voidforge pool source).
+-- Returns (items, ready). `ready` is false ONLY when the rotation hasn't loaded
+-- yet (GetDungeonData nil) — a transient state the caller should retry. Once the
+-- rotation is up, `ready` is true even if this dungeon/spec has no pool (items nil),
+-- which is a permanent "not in the bundle" the caller should stop retrying.
 local function PoolItems(mapID, classID, specID)
 	local data = MythicLoot.Journal and MythicLoot.Journal:GetDungeonData(classID, specID)
-	if not data then return nil end
+	if not data then return nil, false end
 	for _, d in ipairs(data) do
 		if d.info and d.info.challengeMapID == mapID and d.loot and d.loot.items then
-			return d.loot.items
+			return d.loot.items, true
 		end
 	end
-	return nil
+	return nil, true
 end
 
 -- Read the live reward tooltip: dungeon name, Track, and the set of names still
@@ -209,12 +213,12 @@ local function ReconcileFromTooltip()
 	if not mapID then return false end
 
 	local classID, specID = MythicLoot.GetLootSpec()
-	local pool = PoolItems(mapID, classID, specID)
+	local pool, ready = PoolItems(mapID, classID, specID)
 	if not pool then
-		-- Loot is bundled now (ADR 0009), so it's always available once the rotation
-		-- is loaded; a nil pool means this dungeon/spec isn't in the bundle. Nothing
-		-- to wait for — give up (return handled) and leave it to manual marking.
-		return true
+		-- Not ready (rotation still loading) → retry so a cold open doesn't make the
+		-- snapshot path silently no-op. Ready but no pool → this dungeon/spec isn't in
+		-- the bundle; nothing to wait for, give up and leave it to manual marking.
+		return ready
 	end
 
 	-- Safety net for the name-based match: every still-listed item must be a known

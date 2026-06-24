@@ -1104,6 +1104,11 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 			if item.slotKey ~= "Other" then
 				total = total + 1
 				if IsClaimed(mapID, voidTrack, item.itemID) then claimed = claimed + 1 end
+			elseif IsClaimed(mapID, voidTrack, item.itemID) then
+				-- "Other" is never rollable, so a Claim on one is stale state left from
+				-- before the exclusion fix. Clear it from saved state as we pass so it
+				-- stops rendering as claimed — cheap, and keeps SavedVariables self-healing.
+				GetClaims()[ClaimKey(mapID, voidTrack, item.itemID)] = nil
 			end
 		end
 		if total > 0 and claimed == total then
