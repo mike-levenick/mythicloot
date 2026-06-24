@@ -1375,9 +1375,15 @@ local function CreateToolbar()
 	end)
 	floorDropdown:HookScript("OnLeave", GameTooltip_Hide)
 	floorDropdown:SetupMenu(function(_, rootDescription)
+		-- Selecting "—" clears the track AND the slots it seeded — back to All Slots.
+		-- (ClearActiveFloor alone only drops the label; the seeded slots would linger.)
 		rootDescription:CreateRadio("—",
 			function() return activeFloor == nil end,
-			function() ClearActiveFloor() end)
+			function()
+				wipe(MythicLootCharDB.slotFilter)
+				ClearActiveFloor()
+				Render()
+			end)
 		for _, track in ipairs(MythicLoot.TARGET_TRACKS) do
 			rootDescription:CreateRadio(track,
 				function() return activeFloor == track end,
