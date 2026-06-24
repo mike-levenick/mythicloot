@@ -17,3 +17,4 @@ Data/Teleports.lua
 Data/Gear.lua
 Data/Export.lua
 UI/MainWindow.lua
+Data/Voidforge.lua

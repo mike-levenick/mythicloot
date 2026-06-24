@@ -247,6 +247,36 @@ local function ToggleClaim(mapID, track, itemID)
 	Render()
 end
 
+-- Claim seams for the auto-detect module (Data/Voidforge.lua), so it can record
+-- wins / reconcile without reaching into these UI locals. SavedVariables exist by
+-- the time any roll fires, so the lazy GetClaims init is safe here.
+
+-- Set (or clear) a Claim to an explicit value. Returns true if it changed, so a
+-- batch reconcile can refresh once and report a real count. Does NOT re-render —
+-- the caller decides when (use RefreshWindow), keeping batch updates cheap.
+function MythicLoot.SetClaim(mapID, track, itemID, claimed)
+	if not (mapID and track and itemID) then return false end
+	local claims = GetClaims()
+	local k = ClaimKey(mapID, track, itemID)
+	local cur = claims[k] == true
+	local want = claimed and true or false
+	if cur == want then return false end
+	claims[k] = want or nil
+	return true
+end
+
+-- Re-render the grid if it's open. Safe to call when the window was never created.
+function MythicLoot.RefreshWindow()
+	if window and window:IsShown() then Render() end
+end
+
+-- Record a single Voidforge win (the BONUS_ROLL_RESULT path); refreshes if open.
+function MythicLoot.MarkClaim(mapID, track, itemID)
+	if MythicLoot.SetClaim(mapID, track, itemID, true) then
+		MythicLoot.RefreshWindow()
+	end
+end
+
 -- The Gear Track whose Voidforge pool the grid currently shows (a viewing choice,
 -- persisted per character; default Myth). Separate from the Track Floor — see
 -- CONTEXT.md: Voidcore Track.
@@ -912,9 +942,12 @@ local function ResolveCell(items, slot, mapID, statPriority, statActive, filter,
 		-- The Cell passes while any Drop here is still unclaimed at the Voidcore
 		-- Track; show the first such Drop (or a pinned one if it's still rollable),
 		-- so the lit cells read as "where a Voidcore can still win me something".
+		-- "Other" items (crates/tokens) aren't transmutable, so they never count.
 		local avail
-		for _, it in ipairs(items) do
-			if not claimedNow(it.itemID) then avail = it break end
+		if slot.key ~= "Other" then
+			for _, it in ipairs(items) do
+				if not claimedNow(it.itemID) then avail = it break end
+			end
 		end
 		passes = avail ~= nil
 		if pinDrop and not claimedNow(pinDrop.itemID) then
@@ -1063,10 +1096,20 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 	local voidTrack = GetVoidcoreTrack()
 	local poolExhausted = false
 	if ownSpec then
+		-- Only transmutable gear is in the Voidforge Pool — "Other" items (crates,
+		-- tokens) never are, so they must not count toward exhaustion or they'd keep
+		-- a pool from ever reading as fully won.
 		local total, claimed = 0, 0
 		for _, item in ipairs(loot.items) do
-			total = total + 1
-			if IsClaimed(mapID, voidTrack, item.itemID) then claimed = claimed + 1 end
+			if item.slotKey ~= "Other" then
+				total = total + 1
+				if IsClaimed(mapID, voidTrack, item.itemID) then claimed = claimed + 1 end
+			elseif IsClaimed(mapID, voidTrack, item.itemID) then
+				-- "Other" is never rollable, so a Claim on one is stale state left from
+				-- before the exclusion fix. Clear it from saved state as we pass so it
+				-- stops rendering as claimed — cheap, and keeps SavedVariables self-healing.
+				GetClaims()[ClaimKey(mapID, voidTrack, item.itemID)] = nil
+			end
 		end
 		if total > 0 and claimed == total then
 			-- The game reopens a Pool the instant its last item is won, so a fully
@@ -1076,7 +1119,9 @@ local function LayoutDungeonRow(row, dungeon, loot, checkedList, checkedSet, col
 			-- making the pool look exhausted again (ADR 0008 reset rule).
 			local claims = GetClaims()
 			for _, item in ipairs(loot.items) do
-				claims[ClaimKey(mapID, voidTrack, item.itemID)] = nil
+				if item.slotKey ~= "Other" then
+					claims[ClaimKey(mapID, voidTrack, item.itemID)] = nil
+				end
 			end
 			poolExhausted = true
 		end
@@ -1335,9 +1380,15 @@ local function CreateToolbar()
 	end)
 	floorDropdown:HookScript("OnLeave", GameTooltip_Hide)
 	floorDropdown:SetupMenu(function(_, rootDescription)
+		-- Selecting "—" clears the track AND the slots it seeded — back to All Slots.
+		-- (ClearActiveFloor alone only drops the label; the seeded slots would linger.)
 		rootDescription:CreateRadio("—",
 			function() return activeFloor == nil end,
-			function() ClearActiveFloor() end)
+			function()
+				wipe(MythicLootCharDB.slotFilter)
+				ClearActiveFloor()
+				Render()
+			end)
 		for _, track in ipairs(MythicLoot.TARGET_TRACKS) do
 			rootDescription:CreateRadio(track,
 				function() return activeFloor == track end,
