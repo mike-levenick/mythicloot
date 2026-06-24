@@ -80,6 +80,25 @@ local function TrackRankForLink(itemLink)
 	return nil
 end
 
+-- The Gear Track name of an item link (e.g. "Myth"), or nil when it has no upgrade
+-- track. Used by Voidforge auto-detect to read the Track a won bonus-roll item was
+-- awarded at, straight off the item. We return the name ONLY when it's one that
+-- our ladder recognizes: trackString is localized, and the rest of the addon keys
+-- Claims on the English TRACK_ORDER names (ADR 0004). On a non-English client the
+-- localized name won't match, so this no-ops instead of writing a dead claim key.
+function MythicLoot.GetItemTrackName(itemLink)
+	if not itemLink then return nil end
+	local info = C_Item.GetItemUpgradeInfo(itemLink)
+	local name = info and info.trackString
+	return (name and TRACK_RANK[name]) and name or nil
+end
+
+-- Is this a Gear Track name our ladder recognizes (TRACK_ORDER)? Used to validate
+-- a Track parsed from the roll-popup tooltip before keying Claims on it.
+function MythicLoot.IsKnownTrack(name)
+	return name ~= nil and TRACK_RANK[name] ~= nil
+end
+
 -- An equipped item counts as below the floor when it's empty (a gap to fill) or
 -- its track ranks below the floor. Unknown-track items are NOT flagged: we can't
 -- prove they're below, so we don't seed false positives.
