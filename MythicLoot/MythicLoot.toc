@@ -2,7 +2,7 @@
 ## Title: MythicLoot
 ## Notes: Mythic+ dungeon loot with multi-slot filtering — find the dungeons that cover all your missing pieces.
 ## Author: mlev
-## Version: 1.3.0
+## Version: 1.4.0
 ## IconTexture: Interface\Icons\INV_Box_02
 ## Category-enUS: Dungeons & Raids
 ## SavedVariables: MythicLootGlobalDB
