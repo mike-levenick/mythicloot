@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Updated for Mythic+ season 18** — the built-in loot tables now cover the new rotation: Altar of Fangs, Ruby Life Pools, Kings' Rest, Voidscar Arena, Den of Nalorakk, Murder Row, Temple of Sethraliss and The Blinding Vale. On the previous version these all read "No journal data found for this dungeon", since the shipped loot was still season 17's.
+
+- **Teleport buttons** are wired up for the new rotation. As always, a dungeon's button appears once you've earned its Mythic Keystone teleport.
+
+### Fixed
+
+- **Item levels were a season behind.** Drops displayed at last season's upgrade tracks — a Myth drop read 272 where it should have read 318 — because the season's track encoding changed. All five Gear Tracks now show the correct season 18 item level.
+
 ## v1.3.0 — 2026-06-23
 
 ### Added
