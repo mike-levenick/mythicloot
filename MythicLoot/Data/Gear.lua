@@ -24,12 +24,14 @@ MythicLoot.DEFAULT_TRACK_FLOOR = "Hero"
 -- apart. Explorer alone breaks the spacing (its real bonus is elsewhere), so it's
 -- dropped rather than shipped wrong.
 --
--- Midnight S2 (build 120100) rotated the whole block +48 from S1. Champion (12833)
--- is observed directly, from an equipped season-18 trinket via /ml updump
--- (Champion 1/6, ilvl 292); the other four are that same +48 applied to the S1
--- values, which were themselves confirmed in-game last season:
+-- Midnight S2 (build 120100) rotated the whole block +48 from S1:
 --   S1: Adventurer 12769, Veteran 12777, Champion 12785, Hero 12793, Myth 12801
--- Re-confirm each track in-game as season-18 gear in that track turns up.
+-- Champion (12833) is observed directly, from an equipped season-18 trinket via
+-- /ml updump (Champion 1/6, ilvl 292). Myth (12849) is confirmed in-game too: it
+-- renders 318, and an invalid bonus would fall back to the base item level rather
+-- than land on a valid track ilvl. Those two bracket Hero, so the +8 spacing holds
+-- across the block; Adventurer and Veteran sit below the confirmed pair and are
+-- still worth a look as season-18 gear in those tracks turns up.
 MythicLoot.SeasonTrackBonus = {
 	Adventurer = 12817, Veteran = 12825,
 	Champion = 12833, Hero = 12841, Myth = 12849,
