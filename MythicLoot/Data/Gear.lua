@@ -24,8 +24,9 @@ MythicLoot.DEFAULT_TRACK_FLOOR = "Hero"
 -- apart. Explorer alone breaks the spacing (its real bonus is elsewhere), so it's
 -- dropped rather than shipped wrong.
 --
--- Midnight S2 (build 120100) rotated the whole block +48 from S1:
---   S1: Adventurer 12769, Veteran 12777, Champion 12785, Hero 12793, Myth 12801
+-- Season 18 (Midnight 12.1, build 120100) rotated the whole block +48 from the
+-- season 17 values:
+--   s17: Adventurer 12769, Veteran 12777, Champion 12785, Hero 12793, Myth 12801
 -- Champion (12833) is observed directly, from an equipped season-18 trinket via
 -- /ml updump (Champion 1/6, ilvl 292). Myth (12849) is confirmed in-game too: it
 -- renders 318, and an invalid bonus would fall back to the base item level rather
