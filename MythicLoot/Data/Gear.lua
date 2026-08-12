@@ -20,14 +20,19 @@ MythicLoot.DEFAULT_TRACK_FLOOR = "Hero"
 
 -- Upgrade-track bonus IDs for this season's gear, level 1 of each track. Appending
 -- one to an item link makes the game render that track's item level, so bundled
--- loot can be shown at e.g. Myth 1/6 (ADR 0009). Derived from equipped-gear links
--- via /ml updump (Midnight S1, build 120007): Champion (12785), Hero (12793), Myth
--- (12801) observed directly — level N is base+(N-1), tracks +8 apart — with
--- Adventurer/Veteran extrapolated and confirmed in-game. Explorer alone breaks the
--- spacing (its real bonus is elsewhere), so it's dropped rather than shipped wrong.
+-- loot can be shown at e.g. Myth 1/6 (ADR 0009). Level N is base+(N-1), tracks +8
+-- apart. Explorer alone breaks the spacing (its real bonus is elsewhere), so it's
+-- dropped rather than shipped wrong.
+--
+-- Midnight S2 (build 120100) rotated the whole block +48 from S1. Champion (12833)
+-- is observed directly, from an equipped season-18 trinket via /ml updump
+-- (Champion 1/6, ilvl 292); the other four are that same +48 applied to the S1
+-- values, which were themselves confirmed in-game last season:
+--   S1: Adventurer 12769, Veteran 12777, Champion 12785, Hero 12793, Myth 12801
+-- Re-confirm each track in-game as season-18 gear in that track turns up.
 MythicLoot.SeasonTrackBonus = {
-	Adventurer = 12769, Veteran = 12777,
-	Champion = 12785, Hero = 12793, Myth = 12801,
+	Adventurer = 12817, Veteran = 12825,
+	Champion = 12833, Hero = 12841, Myth = 12849,
 }
 
 -- The Gear Tracks offered as upgrade targets in "Help me reach" (and the item level
