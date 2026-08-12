@@ -40,7 +40,7 @@ SLASH_MYTHICLOOT1 = "/mythicloot"
 SLASH_MYTHICLOOT2 = "/ml"
 
 -- Diagnostic/data-gathering commands, only active in dev mode (see /ml dev-mode).
-local DEV_COMMANDS = { tracks = true, stats = true, export = true, updump = true }
+local DEV_COMMANDS = { tracks = true, stats = true, export = true, updump = true, teleports = true }
 
 SlashCmdList.MYTHICLOOT = function(msg)
 	local cmd = (msg or ""):lower():match("^%s*(%S*)")
@@ -52,7 +52,7 @@ SlashCmdList.MYTHICLOOT = function(msg)
 		MythicLootGlobalDB = MythicLootGlobalDB or {}
 		MythicLootGlobalDB.devMode = not MythicLootGlobalDB.devMode
 		if MythicLootGlobalDB.devMode then
-			print("|cff33ff66MythicLoot|r dev mode |cff33ff66ON|r — /ml tracks · stats · export · updump")
+			print("|cff33ff66MythicLoot|r dev mode |cff33ff66ON|r — /ml tracks · stats · export · updump · teleports")
 		else
 			print("|cff33ff66MythicLoot|r dev mode |cffff4444OFF|r")
 		end
@@ -67,6 +67,7 @@ SlashCmdList.MYTHICLOOT = function(msg)
 			if cmd == "stats" then MythicLoot.PrintGearStats() end
 			if cmd == "export" then MythicLoot.ExportLoot() end
 			if cmd == "updump" then MythicLoot.DumpUpgrades() end
+			if cmd == "teleports" then MythicLoot.DumpTeleports() end
 		end
 		return
 	end
