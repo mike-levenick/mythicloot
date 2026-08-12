@@ -31,8 +31,9 @@ MythicLoot.DEFAULT_TRACK_FLOOR = "Hero"
 -- /ml updump (Champion 1/6, ilvl 292). Myth (12849) is confirmed in-game too: it
 -- renders 318, and an invalid bonus would fall back to the base item level rather
 -- than land on a valid track ilvl. Those two bracket Hero, so the +8 spacing holds
--- across the block; Adventurer and Veteran sit below the confirmed pair and are
--- still worth a look as season-18 gear in those tracks turns up.
+-- across the block. Adventurer and Veteran were then checked the same way and
+-- render valid track item levels as well, so every value here has been seen
+-- resolving in-game rather than inferred from the arithmetic alone.
 MythicLoot.SeasonTrackBonus = {
 	Adventurer = 12817, Veteran = 12825,
 	Champion = 12833, Hero = 12841, Myth = 12849,
