@@ -1,4 +1,4 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: MythicLoot
 ## Notes: Mythic+ dungeon loot with multi-slot filtering — find the dungeons that cover all your missing pieces.
 ## Author: mlev
