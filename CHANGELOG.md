@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Maintenance release for WoW 12.1** — no functional changes; re-published so the download is listed under game version 12.1.
+
 ## v1.4.0 — 2026-08-11
 
 ### Changed
